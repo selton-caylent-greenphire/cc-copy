@@ -6,9 +6,21 @@ jobs:
   helm-check:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@master
-    - name: helm-check
-      uses: igabaydulin/helm-check-action@0.1.4
-      env:
-        CHART_LOCATION: ./chart/clincard
-        CHART_VALUES: ./chart/clincard/ci/test-values.yaml
+    - uses: actions/checkout@v1
+    - name: Set up Helm
+      uses: azure/setup-helm@v1
+      with:
+        version: v3.9.2
+    - name: Lint Helm
+      working-directory: ./charts/clincard/
+      run: helm lint .
+    - name: Template Helm
+      working-directory: ./charts/clincard/
+      run: |
+        if [ "${GITHUB_REF##*/}" = "master" ]; then
+          environment_namespace=prod
+        else
+          environment_namespace=${GITHUB_REF##*/}
+        fi
+        helm dependency build
+        helm template . -f ./ci/test-values.yaml -n $environment_namespace
