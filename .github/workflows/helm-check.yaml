@@ -10,5 +10,5 @@ jobs:
     - name: helm-check
       uses: igabaydulin/helm-check-action@0.1.4
       env:
-        CHART_LOCATION: ./chart/clincard
-        CHART_VALUES: ./chart/clincard/ci/test-values.yaml
+        CHART_LOCATION: ./charts/clincard
+        CHART_VALUES: ./charts/clincard/ci/test-values.yaml
