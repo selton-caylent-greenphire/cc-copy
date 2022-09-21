@@ -23,4 +23,6 @@ jobs:
           environment_namespace=${GITHUB_REF##*/}
         fi
         helm dependency build
+        echo $environment_namespace
+        echo "${GITHUB_REF##*/}"
         helm template . -f ./ci/test-values.yaml -n $environment_namespace
