@@ -1,0 +1,89 @@
+{{- if .Values.clamav.enabled }}
+{{- $deploy := .Values.clamav }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "antivir.clamav.name" . }}
+  labels: {{ include "antivir.labels" . | nindent 4 }}
+    component: {{ include "antivir.clamav.name" . }}
+spec:
+  selector:
+    matchLabels: {{ include "antivir.selectorLabels" . | nindent 6 }}
+      component: {{ include "antivir.clamav.name" . }}
+  replicas: {{ default 1 $deploy.replicaCount }}
+  progressDeadlineSeconds: {{ default 600 .Values.progressDeadlineSeconds }}
+  revisionHistoryLimit: {{ default 10 .Values.revisionHistoryLimit }}
+  {{- if .Values.rollingUpdateDeploymentStrategy.enabled }}
+  strategy: 
+    type: {{ default "RollingUpdate" .Values.deploymentStrategyType }}
+    rollingUpdate: {{ include "antivir.rollingUpdateDeploymentStrategy" . | nindent 6 }}
+  {{- end }}
+  template:
+    metadata:
+      labels: {{ include "antivir.selectorLabels" . | nindent 8 }}
+        component: {{ include "antivir.clamav.name" . }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      containers:
+      - name: {{ include "antivir.fullname" . }}
+        image: {{ $deploy.image }}
+        imagePullPolicy: {{ default "IfNotPresent" $deploy.imagePullPolicy }}
+        ports:
+        - containerPort: {{ default 3310 $deploy.service.port }}
+          name: {{ include "antivir.clamav.name" . }}
+          protocol: {{ default "TCP" $deploy.containerPortProtocol }}
+        {{- with $deploy.readinessProbe }}
+        readinessProbe:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with $deploy.livenessProbe }}
+        livenessProbe:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        resources:
+          limits:
+            cpu: {{ default "256m" $deploy.resourcesLimitsCpu }}
+            memory: {{ default "256Mi" $deploy.resourcesLimitsMemory }}
+          requests:
+            cpu: {{ default "10m" $deploy.resourcesRequestsCpu }}
+            memory: {{ default "64Mi" $deploy.resourcesRequestsMemory }}
+        terminationMessagePath: {{ default "/dev/termination-log" $deploy.containersTerminationMessagePath}}
+        terminationMessagePolicy: {{ default "File" $deploy.containersTerminationMessagePolicy}}        
+      {{- with $deploy.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "antivir.serviceAccountName" . }}
+      {{- with $deploy.securityContext }}
+      securityContext:
+        {{- toYaml $deploy.securityContext | nindent 8 }}
+      {{- end }} 
+      {{- with $deploy.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $deploy.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $deploy.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.dnsPolicy }}
+      dnsPolicy: {{ .Values.dnsPolicy }}
+      {{- end }}
+      {{- if .Values.restartPolicy }}
+      restartPolicy: {{ .Values.restartPolicy }}
+      {{- end }}
+      {{- if .Values.schedulerName }}
+      schedulerName: {{ .Values.schedulerName }}
+      {{- end }}
+      {{- if .Values.terminationGracePeriodSeconds }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      {{- end }}
+{{- end -}}

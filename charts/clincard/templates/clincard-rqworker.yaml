@@ -1,0 +1,81 @@
+{{- if eq .Values.clincardrqworker.enable true }}
+{{- $deployment := .Values.clincardrqworker }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels: {{ include "service.labels" . | nindent 4}}
+    tier: {{ default .Values.tier $deployment.tier }}
+  name: {{ include "service.rqworker.fullname" . }}
+spec:
+  progressDeadlineSeconds: {{ default 600 $deployment.progressDeadlineSeconds }}
+  {{- if not $deployment.autoscaling.enabled }}
+  replicas: {{ $deployment.replicas }}
+  {{- end }}
+  revisionHistoryLimit: {{ default 10 $deployment.revisionHistoryLimit }}
+  selector:
+    matchLabels: {{ include "service.selectorLabels" . | nindent 6 }}
+      tier: backend
+  strategy:
+    rollingUpdate:
+      maxSurge: "{{ $deployment.rollingUpdate.maxSurge }}"
+      maxUnavailable: "{{ $deployment.rollingUpdate.maxUnavailable }}"
+    type: RollingUpdate
+  template:
+    metadata:
+      labels: {{ include "service.selectorLabels" . | nindent 8 }}
+        tier: {{ default .Values.tier $deployment.tier }}
+    spec:
+      initContainers: {{ include (print .Template.BasePath "/_deployment_initcontainers.yaml.tpl") . | nindent 8 }}
+      containers:
+      - env:
+{{ include (print .Template.BasePath "/_common_db_env.yaml.tpl"  ) . |  indent 8 }}
+{{ include (print .Template.BasePath "/_common_svc_env.yaml.tpl" ) . |  indent 8 }}
+{{ include (print .Template.BasePath "/_common_task_envs.yaml.tpl" ) . |  indent 8 }}
+{{ include (print .Template.BasePath "/_common_rmq_env.yaml.tpl" ) . |  indent 8 }}
+{{- if .Values.global.jira.enabled }}
+{{ include (print .Template.BasePath "/_common_jira_envs.yaml.tpl" ) . |  indent 8 }}
+{{- end }}
+{{- if .Values.twilio.enabled }}
+{{ include (print .Template.BasePath "/_common_twilio_envs.yaml.tpl" ) . |  indent 8 }}
+{{- end }}
+{{- if eq .Release.Namespace "prod" }}
+{{ include (print .Template.BasePath "/_common_email_envs.yaml.tpl" ) . |  indent 8 }}
+{{- end }}
+        - name: GOOGLE_MAPS_API_KEY
+          valueFrom:
+            secretKeyRef:
+              key: google_maps_api_key
+              name: {{ template "service.secret" . }}
+        - name: STATIC_URL
+          value: https://{{.Values.global.hosts.static}}/
+        - name: LIQUIDFILES_URL
+          value: https://files.greenphire.com
+        - name: LIQUIDFILES_API_KEY
+          valueFrom:
+            secretKeyRef:
+              key: apikey
+              name: files
+        {{- if hasKey $deployment.additionalEnvs "liquidfiles_expiration_days" }}
+        - name: LIQUIDFILES_EXPIRATION_DAYS
+          value: {{ default "" $deployment.additionalEnvs.liquidfiles_expiration_days }}
+        {{- end}}
+        image: {{ $deployment.image }}
+        imagePullPolicy: IfNotPresent
+        name: clincard-rqworker
+        resources: {{ $deployment.resources | toYaml | nindent 10 }}
+        volumeMounts:
+        - mountPath: {{ include "dataMountPath" .}}
+          name: {{ include "dataMountName" .}}
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext: {}
+      volumes:
+      - name: {{ include "dataMountName" .}}
+        persistentVolumeClaim:
+          claimName: {{ include "efsClaimDataName" .}}
+      terminationGracePeriodSeconds: 30
+{{- end }}

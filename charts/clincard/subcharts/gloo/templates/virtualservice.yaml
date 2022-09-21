@@ -1,0 +1,1427 @@
+{{- $host := get (include "hosts" . | fromJson) "apigateway" -}}
+{{- $serviceName := .Values.ingress.gateway -}}
+{{- $servicePort := .Values.ingress.port -}}
+{{- $path := .Values.ingress.path -}}
+{{- $studyIdVar := "study_id" -}}
+{{- $subjectIdVar := "id" -}}
+{{- $subjectSvcUpstream := printf "%s-%s-%.0f" .Release.Namespace .Values.dependencies.subjectsvc.name .Values.dependencies.subjectsvc.port -}}
+{{- $studySvcUpstream := printf "%s-%s-%.0f" .Release.Namespace .Values.dependencies.studysvc.name .Values.dependencies.studysvc.port -}}
+{{- $eproSvcUpstream := printf "%s-%s-%.0f" .Release.Namespace .Values.dependencies.eprosvc.name .Values.dependencies.eprosvc.port -}}
+{{- $swaggeruiUpstream := printf "%s-%s-%.0f" .Release.Namespace .Values.dependencies.swaggerui.name .Values.dependencies.swaggerui.port -}}
+{{- if eq .Values.virtualservice.enabled true -}}
+apiVersion: gateway.solo.io/v1
+kind: VirtualService
+metadata:
+  name: {{ .Release.Namespace }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  virtualHost:
+    domains:
+    - {{ $host }}
+    routes:
+    # START StudySvc virtualservice
+    - matchers:
+      - methods:
+          - GET
+        regex: \/study(\/)?(\?.*)?$
+      routeAction:
+        single:
+          destinationSpec:
+            rest:
+              functionName: getAllStudies
+          upstream:
+            name: {{ $studySvcUpstream }}
+            namespace: {{ .Values.gloo_namespace }}
+      options:
+        transformations:
+          requestTransformation:
+            transformationTemplate:
+              passthrough: {}
+        regexRewrite:
+          pattern:
+            regex: '\/study(\/)?(\?.*)?$'
+          substitution: '/\2'
+    - matchers:
+      - methods:
+          - GET
+        regex: \/study\/\b[0-9a-f]{8}\b-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-\b[0-9a-f]{12}\b
+      routeAction:
+        single:
+          destinationSpec:
+            rest:
+              functionName: get
+          upstream:
+            name: {{ $studySvcUpstream }}
+            namespace: {{ .Values.gloo_namespace }}
+      options:
+        transformations:
+          requestTransformation:
+            transformationTemplate:
+              extractors:
+                study_id:
+                  header: ':path'
+                  regex: '\b[0-9a-f]{8}\b-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-\b[0-9a-f]{12}\b'
+                  subgroup: 0
+              headers:
+                study_id:
+                  text: {{ $studyIdVar }}
+        regexRewrite:
+          pattern:
+            regex: '\/study'
+          substitution: '\/'
+    - matchers:
+      - methods:
+          - GET
+        regex: \/study\/\b[0-9a-f]{32}\b
+      routeAction:
+        single:
+          destinationSpec:
+            rest:
+              functionName: get
+          upstream:
+            name: {{ $studySvcUpstream }}
+            namespace: {{ .Values.gloo_namespace }}
+      options:
+        transformations:
+          requestTransformation:
+            transformationTemplate:
+              extractors:
+                study_id:
+                  header: ':path'
+                  regex: '\b[0-9a-f]{32}\b'
+                  subgroup: 0
+              headers:
+                study_id:
+                  text: {{ $studyIdVar }}
+        regexRewrite:
+          pattern:
+            regex: '\/study'
+          substitution: '\/'
+    - matchers:
+      - methods:
+          - GET
+        regex: \/study\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/
+      routeAction:
+        single:
+          destinationSpec:
+            rest:
+              functionName: get
+          upstream:
+            name: {{ $studySvcUpstream }}
+            namespace: {{ .Values.gloo_namespace }}
+      options:
+        transformations:
+          requestTransformation:
+            transformationTemplate:
+              extractors:
+                study_id:
+                  header: ':path'
+                  regex: '\b[0-9a-f]{8}\b-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-\b[0-9a-f]{12}\b'
+                  subgroup: 0
+              headers:
+                study_id:
+                  text: {{ $studyIdVar }}
+        regexRewrite:
+          pattern:
+            regex: '\/study'
+          substitution: '\/'
+    - matchers:
+      - methods:
+          - GET
+        regex: \/study\/\b[0-9a-f]{32}\b/
+      routeAction:
+        single:
+          destinationSpec:
+            rest:
+              functionName: get
+          upstream:
+            name: {{ $studySvcUpstream }}
+            namespace: {{ .Values.gloo_namespace }}
+      options:
+        transformations:
+          requestTransformation:
+            transformationTemplate:
+              extractors:
+                study_id:
+                  header: ':path'
+                  regex: '\b[0-9a-f]{32}\b'
+                  subgroup: 0
+              headers:
+                study_id:
+                  text: {{ $studyIdVar }}
+        regexRewrite:
+          pattern:
+            regex: '\/study'
+          substitution: '\/'
+    - matchers:
+      - exact: /study/swagger.json
+        methods:
+          - GET
+      routeAction:
+        single:
+          upstream:
+            name: {{ $studySvcUpstream }}
+            namespace: {{ .Values.gloo_namespace }}
+      options:
+        regexRewrite:
+          pattern:
+            regex: '\/study'
+          substitution: '\/'
+    # END StudySvc virtualservice
+    # StudySvc v1
+    - matchers:
+      - methods:
+          - GET
+        regex: \/study\/v1(\/)?(\?.*)?$
+      routeAction:
+        single:
+          destinationSpec:
+            rest:
+              functionName: getAllStudies
+          upstream:
+            name: {{ $studySvcUpstream }}
+            namespace: {{ .Values.gloo_namespace }}
+      options:
+        transformations:
+          requestTransformation:
+            transformationTemplate:
+              passthrough: {}
+        regexRewrite:
+          pattern:
+            regex: '\/study\/v1(\/)?(\?.*)?$'
+          substitution: '/\2'
+    - matchers:
+      - methods:
+          - GET
+        regex: \/study\/v1\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}
+      routeAction:
+        single:
+          destinationSpec:
+            rest:
+              functionName: get
+          upstream:
+            name: {{ $studySvcUpstream }}
+            namespace: {{ .Values.gloo_namespace }}
+      options:
+        transformations:
+          requestTransformation:
+            transformationTemplate:
+              extractors:
+                study_id:
+                  header: ':path'
+                  regex: '\b[0-9a-f]{8}\b-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-\b[0-9a-f]{12}\b'
+                  subgroup: 0
+              headers:
+                study_id:
+                  text: {{ $studyIdVar }}
+        regexRewrite:
+          pattern:
+            regex: '\/study\/v1'
+          substitution: '\/'
+    - matchers:
+      - methods:
+          - GET
+        regex: \/study\/v1\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/
+      routeAction:
+        single:
+          destinationSpec:
+            rest:
+              functionName: get
+          upstream:
+            name: {{ $studySvcUpstream }}
+            namespace: {{ .Values.gloo_namespace }}
+      options:
+        transformations:
+          requestTransformation:
+            transformationTemplate:
+              extractors:
+                study_id:
+                  header: ':path'
+                  regex: '\b[0-9a-f]{8}\b-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-\b[0-9a-f]{12}\b'
+                  subgroup: 0
+              headers:
+                study_id:
+                  text: {{ $studyIdVar }}
+        regexRewrite:
+          pattern:
+            regex: '\/study\/v1'
+          substitution: '\/'
+    - matchers:
+      - methods:
+          - GET
+        regex: \/study\/v1\/\b[0-9a-f]{32}\b
+      routeAction:
+        single:
+          destinationSpec:
+            rest:
+              functionName: get
+          upstream:
+            name: {{ $studySvcUpstream }}
+            namespace: {{ .Values.gloo_namespace }}
+      options:
+        transformations:
+          requestTransformation:
+            transformationTemplate:
+              extractors:
+                study_id:
+                  header: ':path'
+                  regex: '\b[0-9a-f]{32}\b'
+                  subgroup: 0
+              headers:
+                study_id:
+                  text: {{ $studyIdVar }}
+        regexRewrite:
+          pattern:
+            regex: '\/study\/v1'
+          substitution: '\/'
+    - matchers:
+      - methods:
+          - GET
+        regex: \/study\/v1\/\b[0-9a-f]{32}\b/
+      routeAction:
+        single:
+          destinationSpec:
+            rest:
+              functionName: get
+          upstream:
+            name: {{ $studySvcUpstream }}
+            namespace: {{ .Values.gloo_namespace }}
+      options:
+        transformations:
+          requestTransformation:
+            transformationTemplate:
+              extractors:
+                study_id:
+                  header: ':path'
+                  regex: '\b[0-9a-f]{32}\b'
+                  subgroup: 0
+              headers:
+                study_id:
+                  text: {{ $studyIdVar }}
+        regexRewrite:
+          pattern:
+            regex: '\/study\/v1'
+          substitution: '\/'
+    - matchers:
+      - exact: /study/v1/swagger.json
+        methods:
+          - GET
+      routeAction:
+        single:
+          upstream:
+            name: {{ $studySvcUpstream }}
+            namespace: {{ .Values.gloo_namespace }}
+      options:
+        regexRewrite:
+          pattern:
+            regex: '\/study\/v1'
+          substitution: '\/'
+    # SubjectSvc virtualservice
+    - matchers:
+      - methods:
+          - GET
+        regex: \/subject(\/)?(\?.*)?$
+      routeAction:
+        single:
+          destinationSpec:
+            rest:
+              functionName: getAllSubjects
+          upstream:
+            name: {{ $subjectSvcUpstream }}
+            namespace: {{ .Values.gloo_namespace }}
+      options:
+        transformations:
+          requestTransformation:
+            transformationTemplate:
+              passthrough: {}
+        regexRewrite:
+          pattern:
+            regex: '\/subject(\/)?(\?.*)?$'
+          substitution: '/\2'
+    - matchers:
+      - methods:
+          - GET
+        regex: \/subject\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/
+      routeAction:
+        single:
+          destinationSpec:
+            rest:
+              functionName: getSingleSubject
+          upstream:
+            name: {{ $subjectSvcUpstream }}
+            namespace: {{ .Values.gloo_namespace }}
+      options:
+        transformations:
+          requestTransformation:
+            transformationTemplate:
+              extractors:
+                id:
+                  header: ':path'
+                  regex: '\b[0-9a-f]{8}\b-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-\b[0-9a-f]{12}\b'
+                  subgroup: 0
+              headers:
+                id:
+                  text: {{ $subjectIdVar }}
+        regexRewrite:
+          pattern:
+            regex: '\/subject'
+          substitution: '\/'
+    - matchers:
+      - methods:
+          - GET
+        regex: \/subject\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}
+      routeAction:
+        single:
+          destinationSpec:
+            rest:
+              functionName: getSingleSubject
+          upstream:
+            name: {{ $subjectSvcUpstream }}
+            namespace: {{ .Values.gloo_namespace }}
+      options:
+        transformations:
+          requestTransformation:
+            transformationTemplate:
+              extractors:
+                id:
+                  header: ':path'
+                  regex: '\b[0-9a-f]{8}\b-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-\b[0-9a-f]{12}\b'
+                  subgroup: 0
+              headers:
+                id:
+                  text: {{ $subjectIdVar }}
+        regexRewrite:
+          pattern:
+            regex: '\/subject'
+          substitution: '\/'
+    - matchers:
+      - methods:
+          - GET
+        regex: /subject/\b[0-9a-f]{8}\b-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-\b[0-9a-f]{12}\b/cards(/)?$
+      routeAction:
+        single:
+          destinationSpec:
+            rest:
+              functionName: getSubjectWithCardsV2
+          upstream:
+            name: {{ $subjectSvcUpstream }}
+            namespace: {{ .Values.gloo_namespace }}
+      options:
+        transformations:
+          requestTransformation:
+            transformationTemplate:
+              passthrough: {}
+        regexRewrite:
+          pattern:
+            regex: '/subject/'
+          substitution: '/v2/'
+    - matchers:
+      - methods:
+          - GET
+        regex: /subject/\b[0-9a-f]{32}\b/cards(/)?$
+      routeAction:
+        single:
+          destinationSpec:
+            rest:
+              functionName: getSubjectWithCardsV2
+          upstream:
+            name: {{ $subjectSvcUpstream }}
+            namespace: {{ .Values.gloo_namespace }}
+      options:
+        transformations:
+          requestTransformation:
+            transformationTemplate:
+              passthrough: {}
+        regexRewrite:
+          pattern:
+            regex: '/subject/'
+          substitution: '/v2/'
+    - matchers:
+      - methods:
+          - GET
+        regex: \/subject\/\b[0-9a-f]{8}\b-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-\b[0-9a-f]{12}\b\/transactions
+      routeAction:
+        single:
+          destinationSpec:
+            rest:
+              functionName: getSubjectWithTransactions
+          upstream:
+            name: {{ $subjectSvcUpstream }}
+            namespace: {{ .Values.gloo_namespace }}
+      options:
+        transformations:
+          requestTransformation:
+            transformationTemplate:
+              extractors:
+                id:
+                  header: ':path'
+                  regex: '\b[0-9a-f]{8}\b-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-\b[0-9a-f]{12}\b'
+                  subgroup: 0
+              headers:
+                id:
+                  text: {{ $subjectIdVar }}
+        regexRewrite:
+          pattern:
+            regex: '\/subject'
+          substitution: '\/'
+    - matchers:
+      - methods:
+          - GET
+        regex: \/subject\/\b[0-9a-f]{8}\b-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-\b[0-9a-f]{12}\b\/transactions\/
+      routeAction:
+        single:
+          destinationSpec:
+            rest:
+              functionName: getSubjectWithTransactions
+          upstream:
+            name: {{ $subjectSvcUpstream }}
+            namespace: {{ .Values.gloo_namespace }}
+      options:
+        transformations:
+          requestTransformation:
+            transformationTemplate:
+              extractors:
+                id:
+                  header: ':path'
+                  regex: '\b[0-9a-f]{8}\b-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-\b[0-9a-f]{12}\b'
+                  subgroup: 0
+              headers:
+                id:
+                  text: {{ $subjectIdVar }}
+        regexRewrite:
+          pattern:
+            regex: '\/subject'
+          substitution: '\/'
+    - matchers:
+      - methods:
+          - GET
+        regex: \/subject\/\b[0-9a-f]{32}\b\/
+      routeAction:
+        single:
+          destinationSpec:
+            rest:
+              functionName: getSingleSubject
+          upstream:
+            name: {{ $subjectSvcUpstream }}
+            namespace: {{ .Values.gloo_namespace }}
+      options:
+        transformations:
+          requestTransformation:
+            transformationTemplate:
+              extractors:
+                id:
+                  header: ':path'
+                  regex: '\b[0-9a-f]{32}\b'
+                  subgroup: 0
+              headers:
+                id:
+                  text: {{ $subjectIdVar }}
+        regexRewrite:
+          pattern:
+            regex: '\/subject'
+          substitution: '\/'
+    - matchers:
+      - methods:
+          - GET
+        regex: \/subject\/\b[0-9a-f]{32}\b
+      routeAction:
+        single:
+          destinationSpec:
+            rest:
+              functionName: getSingleSubject
+          upstream:
+            name: {{ $subjectSvcUpstream }}
+            namespace: {{ .Values.gloo_namespace }}
+      options:
+        transformations:
+          requestTransformation:
+            transformationTemplate:
+              extractors:
+                id:
+                  header: ':path'
+                  regex: '\b[0-9a-f]{32}\b'
+                  subgroup: 0
+              headers:
+                id:
+                  text: {{ $subjectIdVar }}
+        regexRewrite:
+          pattern:
+            regex: '\/subject'
+          substitution: '\/'
+    - matchers:
+      - methods:
+          - GET
+        regex: \/subject\/\b[0-9a-f]{32}\b\/transactions
+      routeAction:
+        single:
+          destinationSpec:
+            rest:
+              functionName: getSubjectWithTransactions
+          upstream:
+            name: {{ $subjectSvcUpstream }}
+            namespace: {{ .Values.gloo_namespace }}
+      options:
+        transformations:
+          requestTransformation:
+            transformationTemplate:
+              extractors:
+                id:
+                  header: ':path'
+                  regex: '\b[0-9a-f]{32}\b'
+                  subgroup: 0
+              headers:
+                id:
+                  text: {{ $subjectIdVar }}
+        regexRewrite:
+          pattern:
+            regex: '\/subject'
+          substitution: '\/'
+    - matchers:
+      - methods:
+          - GET
+        regex: \/subject\/\b[0-9a-f]{32}\b\/transactions\/
+      routeAction:
+        single:
+          destinationSpec:
+            rest:
+              functionName: getSubjectWithTransactions
+          upstream:
+            name: {{ $subjectSvcUpstream }}
+            namespace: {{ .Values.gloo_namespace }}
+      options:
+        transformations:
+          requestTransformation:
+            transformationTemplate:
+              extractors:
+                id:
+                  header: ':path'
+                  regex: '\b[0-9a-f]{32}\b'
+                  subgroup: 0
+              headers:
+                id:
+                  text: {{ $subjectIdVar }}
+        regexRewrite:
+          pattern:
+            regex: '\/subject'
+          substitution: '\/'
+    - matchers:
+      - exact: /subject/swagger.json
+        methods:
+          - GET
+      routeAction:
+        single:
+          upstream:
+            name: {{ $subjectSvcUpstream }}
+            namespace: {{ .Values.gloo_namespace }}
+      options:
+        regexRewrite:
+          pattern:
+            regex: '\/subject'
+          substitution: '\/'
+    # SubjectSvc v1
+    - matchers:
+      - methods:
+          - GET
+        regex: \/subject\/v1(\/)?(\?.*)?$
+      routeAction:
+        single:
+          destinationSpec:
+            rest:
+              functionName: getAllSubjects
+          upstream:
+            name: {{ $subjectSvcUpstream }}
+            namespace: {{ .Values.gloo_namespace }}
+      options:
+        transformations:
+          requestTransformation:
+            transformationTemplate:
+              passthrough: {}
+        regexRewrite:
+          pattern:
+            regex: '\/subject\/v1(\/)?(\?.*)?$'
+          substitution: '/\2'
+    - matchers:
+      - methods:
+          - GET
+        regex: \/subject\/v1\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/
+      routeAction:
+        single:
+          destinationSpec:
+            rest:
+              functionName: getSingleSubject
+          upstream:
+            name: {{ $subjectSvcUpstream }}
+            namespace: {{ .Values.gloo_namespace }}
+      options:
+        transformations:
+          requestTransformation:
+            transformationTemplate:
+              extractors:
+                id:
+                  header: ':path'
+                  regex: '\b[0-9a-f]{8}\b-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-\b[0-9a-f]{12}\b'
+                  subgroup: 0
+              headers:
+                id:
+                  text: {{ $subjectIdVar }}
+        regexRewrite:
+          pattern:
+            regex: '\/subject\/v1'
+          substitution: '\/'
+    - matchers:
+      - methods:
+          - GET
+        regex: \/subject\/v1\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}
+      routeAction:
+        single:
+          destinationSpec:
+            rest:
+              functionName: getSingleSubject
+          upstream:
+            name: {{ $subjectSvcUpstream }}
+            namespace: {{ .Values.gloo_namespace }}
+      options:
+        transformations:
+          requestTransformation:
+            transformationTemplate:
+              extractors:
+                id:
+                  header: ':path'
+                  regex: '\b[0-9a-f]{8}\b-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-\b[0-9a-f]{12}\b'
+                  subgroup: 0
+              headers:
+                id:
+                  text: {{ $subjectIdVar }}
+        regexRewrite:
+          pattern:
+            regex: '\/subject\/v1'
+          substitution: '\/'
+    - matchers:
+      - methods:
+          - GET
+        regex: /subject/v1/\b[0-9a-f]{8}\b-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-\b[0-9a-f]{12}\b/cards(/)?$
+      routeAction:
+        single:
+          destinationSpec:
+            rest:
+              functionName: getSubjectWithCards
+          upstream:
+            name: {{ $subjectSvcUpstream }}
+            namespace: {{ .Values.gloo_namespace }}
+      options:
+        transformations:
+          requestTransformation:
+            transformationTemplate:
+              passthrough: {}
+        regexRewrite:
+          pattern:
+            regex: '/subject/'
+          substitution: '/'
+    - matchers:
+      - methods:
+          - GET
+        regex: /subject/v1/\b[0-9a-f]{32}\b/cards(/)?$
+      routeAction:
+        single:
+          destinationSpec:
+            rest:
+              functionName: getSubjectWithCards
+          upstream:
+            name: {{ $subjectSvcUpstream }}
+            namespace: {{ .Values.gloo_namespace }}
+      options:
+        transformations:
+          requestTransformation:
+            transformationTemplate:
+              passthrough: {}
+        regexRewrite:
+          pattern:
+            regex: '/subject/'
+          substitution: '/'
+    - matchers:
+      - methods:
+          - GET
+        regex: \/subject\/v1\/\b[0-9a-f]{8}\b-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-\b[0-9a-f]{12}\b\/transactions
+      routeAction:
+        single:
+          destinationSpec:
+            rest:
+              functionName: getSubjectWithTransactions
+          upstream:
+            name: {{ $subjectSvcUpstream }}
+            namespace: {{ .Values.gloo_namespace }}
+      options:
+        transformations:
+          requestTransformation:
+            transformationTemplate:
+              extractors:
+                id:
+                  header: ':path'
+                  regex: '\b[0-9a-f]{8}\b-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-\b[0-9a-f]{12}\b'
+                  subgroup: 0
+              headers:
+                id:
+                  text: {{ $subjectIdVar }}
+        regexRewrite:
+          pattern:
+            regex: '\/subject\/v1'
+          substitution: '\/'
+    - matchers:
+      - methods:
+          - GET
+        regex: \/subject\/v1\/\b[0-9a-f]{8}\b-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-\b[0-9a-f]{12}\b\/transactions\/
+      routeAction:
+        single:
+          destinationSpec:
+            rest:
+              functionName: getSubjectWithTransactions
+          upstream:
+            name: {{ $subjectSvcUpstream }}
+            namespace: {{ .Values.gloo_namespace }}
+      options:
+        transformations:
+          requestTransformation:
+            transformationTemplate:
+              extractors:
+                id:
+                  header: ':path'
+                  regex: '\b[0-9a-f]{8}\b-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-\b[0-9a-f]{12}\b'
+                  subgroup: 0
+              headers:
+                id:
+                  text: {{ $subjectIdVar }}
+        regexRewrite:
+          pattern:
+            regex: '\/subject\/v1'
+          substitution: '\/'
+    - matchers:
+      - methods:
+          - GET
+        regex: \/subject\/v1\/\b[0-9a-f]{32}\b\/
+      routeAction:
+        single:
+          destinationSpec:
+            rest:
+              functionName: getSingleSubject
+          upstream:
+            name: {{ $subjectSvcUpstream }}
+            namespace: {{ .Values.gloo_namespace }}
+      options:
+        transformations:
+          requestTransformation:
+            transformationTemplate:
+              extractors:
+                id:
+                  header: ':path'
+                  regex: '\b[0-9a-f]{32}\b'
+                  subgroup: 0
+              headers:
+                id:
+                  text: {{ $subjectIdVar }}
+        regexRewrite:
+          pattern:
+            regex: '\/subject\/v1'
+          substitution: '\/'
+    - matchers:
+      - methods:
+          - GET
+        regex: \/subject\/v1\/\b[0-9a-f]{32}\b
+      routeAction:
+        single:
+          destinationSpec:
+            rest:
+              functionName: getSingleSubject
+          upstream:
+            name: {{ $subjectSvcUpstream }}
+            namespace: {{ .Values.gloo_namespace }}
+      options:
+        transformations:
+          requestTransformation:
+            transformationTemplate:
+              extractors:
+                id:
+                  header: ':path'
+                  regex: '\b[0-9a-f]{32}\b'
+                  subgroup: 0
+              headers:
+                id:
+                  text: {{ $subjectIdVar }}
+        regexRewrite:
+          pattern:
+            regex: '\/subject\/v1'
+          substitution: '\/'
+    - matchers:
+      - methods:
+          - GET
+        regex: \/subject\/v1\/\b[0-9a-f]{32}\b\/transactions
+      routeAction:
+        single:
+          destinationSpec:
+            rest:
+              functionName: getSubjectWithTransactions
+          upstream:
+            name: {{ $subjectSvcUpstream }}
+            namespace: {{ .Values.gloo_namespace }}
+      options:
+        transformations:
+          requestTransformation:
+            transformationTemplate:
+              extractors:
+                id:
+                  header: ':path'
+                  regex: '\b[0-9a-f]{32}\b'
+                  subgroup: 0
+              headers:
+                id:
+                  text: {{ $subjectIdVar }}
+        regexRewrite:
+          pattern:
+            regex: '\/subject\/v1'
+          substitution: '\/'
+    - matchers:
+      - methods:
+          - GET
+        regex: \/subject\/v1\/\b[0-9a-f]{32}\b\/transactions\/
+      routeAction:
+        single:
+          destinationSpec:
+            rest:
+              functionName: getSubjectWithTransactions
+          upstream:
+            name: {{ $subjectSvcUpstream }}
+            namespace: {{ .Values.gloo_namespace }}
+      options:
+        transformations:
+          requestTransformation:
+            transformationTemplate:
+              extractors:
+                id:
+                  header: ':path'
+                  regex: '\b[0-9a-f]{32}\b'
+                  subgroup: 0
+              headers:
+                id:
+                  text: {{ $subjectIdVar }}
+        regexRewrite:
+          pattern:
+            regex: '\/subject\/v1'
+          substitution: '\/'
+    - matchers:
+      - exact: /subject/v1/swagger.json
+        methods:
+          - GET
+      routeAction:
+        single:
+          upstream:
+            name: {{ $subjectSvcUpstream }}
+            namespace: {{ .Values.gloo_namespace }}
+      options:
+        regexRewrite:
+          pattern:
+            regex: '\/subject\/v1'
+          substitution: '\/'
+    - matchers:
+      - methods:
+          - GET
+        regex: /subject/v2/\b[0-9a-f]{8}\b-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-\b[0-9a-f]{12}\b/cards(/)?$
+      routeAction:
+        single:
+          destinationSpec:
+            rest:
+              functionName: getSubjectWithCardsV2
+          upstream:
+            name: {{ $subjectSvcUpstream }}
+            namespace: {{ .Values.gloo_namespace }}
+      options:
+        transformations:
+          requestTransformation:
+            transformationTemplate:
+              passthrough: {}
+        regexRewrite:
+          pattern:
+            regex: '/subject/'
+          substitution: '/'
+    - matchers:
+      - methods:
+          - GET
+        regex: /subject/v2/\b[0-9a-f]{32}\b/cards(/)?$
+      routeAction:
+        single:
+          destinationSpec:
+            rest:
+              functionName: getSubjectWithCardsV2
+          upstream:
+            name: {{ $subjectSvcUpstream }}
+            namespace: {{ .Values.gloo_namespace }}
+      options:
+        transformations:
+          requestTransformation:
+            transformationTemplate:
+              passthrough: {}
+        regexRewrite:
+          pattern:
+            regex: '/subject/'
+          substitution: '/'
+    # ePro VirtualService
+    - matchers:
+      - methods:
+          - POST
+        regex: \/epro\/payment
+      routeAction:
+        single:
+          destinationSpec:
+            rest:
+              functionName: requestPayment
+          upstream:
+            name: {{ $eproSvcUpstream }}
+            namespace: {{ .Values.gloo_namespace }}
+      options:
+        transformations:
+          requestTransformation:
+            transformationTemplate:
+              passthrough: {}
+        regexRewrite:
+          pattern:
+            regex: '\/epro'
+          substitution: '\/'
+    - matchers:
+      - methods:
+          - POST
+        regex: \/epro\/payment\/
+      routeAction:
+        single:
+          destinationSpec:
+            rest:
+              functionName: requestPayment
+          upstream:
+            name: {{ $eproSvcUpstream }}
+            namespace: {{ .Values.gloo_namespace }}
+      options:
+        transformations:
+          requestTransformation:
+            transformationTemplate:
+              passthrough: {}
+        regexRewrite:
+          pattern:
+            regex: '\/epro'
+          substitution: '\/'
+    - matchers:
+      - methods:
+          - POST
+        regex: \/epro\/payment\/\b[a-zA-Z-_%+0-9]*\b$
+      routeAction:
+        single:
+          destinationSpec:
+            rest:
+              functionName: requestPayment
+          upstream:
+            name: {{ $eproSvcUpstream }}
+            namespace: {{ .Values.gloo_namespace }}
+      options:
+        transformations:
+          requestTransformation:
+            transformationTemplate:
+              passthrough: {}
+        regexRewrite:
+          pattern:
+            regex: '\/epro\/payment\/\b[a-zA-Z-_%+0-9]*\b$'
+          substitution: '/payment'
+    - matchers:
+      - methods:
+          - POST
+        regex: \/epro\/payment\/\b[a-zA-Z-_%+0-9]*\b\/$
+      routeAction:
+        single:
+          destinationSpec:
+            rest:
+              functionName: requestPayment
+          upstream:
+            name: {{ $eproSvcUpstream }}
+            namespace: {{ .Values.gloo_namespace }}
+      options:
+        transformations:
+          requestTransformation:
+            transformationTemplate:
+              passthrough: {}
+        regexRewrite:
+          pattern:
+            regex: '\/epro\/payment\/\b[a-zA-Z-_%+0-9]*\b\/$'
+          substitution: '/payment'
+    - matchers:
+      - methods:
+          - POST
+        regex: \/epro\/subject
+      routeAction:
+        single:
+          destinationSpec:
+            rest:
+              functionName: validateSubject
+          upstream:
+            name: {{ $eproSvcUpstream }}
+            namespace: {{ .Values.gloo_namespace }}
+      options:
+        transformations:
+          requestTransformation:
+            transformationTemplate:
+              passthrough: {}
+        regexRewrite:
+          pattern:
+            regex: '\/epro'
+          substitution: '\/'
+    - matchers:
+      - methods:
+          - POST
+        regex: \/epro\/subject\/
+      routeAction:
+        single:
+          destinationSpec:
+            rest:
+              functionName: validateSubject
+          upstream:
+            name: {{ $eproSvcUpstream }}
+            namespace: {{ .Values.gloo_namespace }}
+      options:
+        transformations:
+          requestTransformation:
+            transformationTemplate:
+              passthrough: {}
+        regexRewrite:
+          pattern:
+            regex: '\/epro'
+          substitution: '\/'
+    - matchers:
+      - methods:
+          - POST
+        regex: \/epro\/subject\/\b[a-zA-Z-_%+0-9]*\b$
+      routeAction:
+        single:
+          destinationSpec:
+            rest:
+              functionName: validateSubject
+          upstream:
+            name: {{ $eproSvcUpstream }}
+            namespace: {{ .Values.gloo_namespace }}
+      options:
+        transformations:
+          requestTransformation:
+            transformationTemplate:
+              passthrough: {}
+        regexRewrite:
+          pattern:
+            regex: '\/epro\/subject\/\b[a-zA-Z-_%+0-9]*\b$'
+          substitution: '/subject'
+    - matchers:
+      - methods:
+          - POST
+        regex: \/epro\/subject\/\b[a-zA-Z-_%+0-9]*\b\/$
+      routeAction:
+        single:
+          destinationSpec:
+            rest:
+              functionName: validateSubject
+          upstream:
+            name: {{ $eproSvcUpstream }}
+            namespace: {{ .Values.gloo_namespace }}
+      options:
+        transformations:
+          requestTransformation:
+            transformationTemplate:
+              passthrough: {}
+        regexRewrite:
+          pattern:
+            regex: '\/epro\/subject\/\b[a-zA-Z-_%+0-9]*\b\/$'
+          substitution: '/subject'
+    - matchers:
+      - methods:
+          - GET
+        regex: /epro/payment/\b[0-9a-f]{8}\b-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-\b[0-9a-f]{12}\b(/)?$
+      routeAction:
+        single:
+          destinationSpec:
+            rest:
+              functionName: getPaymentStatus
+          upstream:
+            name: {{ $eproSvcUpstream }}
+            namespace: {{ .Values.gloo_namespace }}
+      options:
+        transformations:
+          requestTransformation:
+            transformationTemplate:
+              passthrough: {}
+        regexRewrite:
+          pattern:
+            regex: '/epro'
+          substitution: '/'
+    - matchers:
+      - methods:
+          - GET
+        regex: /epro/payment/\b[0-9a-fA-F]{32}\b(/)?$
+      routeAction:
+        single:
+          destinationSpec:
+            rest:
+              functionName: getPaymentStatus
+          upstream:
+            name: {{ $eproSvcUpstream }}
+            namespace: {{ .Values.gloo_namespace }}
+      options:
+        transformations:
+          requestTransformation:
+            transformationTemplate:
+              passthrough: {}
+        regexRewrite:
+          pattern:
+            regex: '/epro'
+          substitution: '/'
+    - matchers:
+      - exact: /epro/swagger.json
+        methods:
+          - GET
+      routeAction:
+        single:
+          upstream:
+            name: {{ $eproSvcUpstream }}
+            namespace: {{ .Values.gloo_namespace }}
+      options:
+        regexRewrite:
+          pattern:
+            regex: '\/epro'
+          substitution: '\/'
+    # ePro v1
+    - matchers:
+      - methods:
+          - POST
+        regex: \/epro\/v1\/payment
+      routeAction:
+        single:
+          destinationSpec:
+            rest:
+              functionName: requestPayment
+          upstream:
+            name: {{ $eproSvcUpstream }}
+            namespace: {{ .Values.gloo_namespace }}
+      options:
+        transformations:
+          requestTransformation:
+            transformationTemplate:
+              passthrough: {}
+        regexRewrite:
+          pattern:
+            regex: '\/epro\/v1'
+          substitution: '\/'
+    - matchers:
+      - methods:
+          - POST
+        regex: \/epro\/v1\/payment\/
+      routeAction:
+        single:
+          destinationSpec:
+            rest:
+              functionName: requestPayment
+          upstream:
+            name: {{ $eproSvcUpstream }}
+            namespace: {{ .Values.gloo_namespace }}
+      options:
+        transformations:
+          requestTransformation:
+            transformationTemplate:
+              passthrough: {}
+        regexRewrite:
+          pattern:
+            regex: '\/epro\/v1'
+          substitution: '\/'
+    - matchers:
+      - methods:
+          - POST
+        regex: \/epro\/v1\/payment\/\b[a-zA-Z-_%+0-9]*\b$
+      routeAction:
+        single:
+          destinationSpec:
+            rest:
+              functionName: requestPayment
+          upstream:
+            name: {{ $eproSvcUpstream }}
+            namespace: {{ .Values.gloo_namespace }}
+      options:
+        transformations:
+          requestTransformation:
+            transformationTemplate:
+              passthrough: {}
+        regexRewrite:
+          pattern:
+            regex: '\/epro\/v1\/payment\/\b[a-zA-Z-_%+0-9]*\b$'
+          substitution: '/payment'
+    - matchers:
+      - methods:
+          - POST
+        regex: \/epro\/v1\/payment\/\b[a-zA-Z-_%+0-9]*\b\/$
+      routeAction:
+        single:
+          destinationSpec:
+            rest:
+              functionName: requestPayment
+          upstream:
+            name: {{ $eproSvcUpstream }}
+            namespace: {{ .Values.gloo_namespace }}
+      options:
+        transformations:
+          requestTransformation:
+            transformationTemplate:
+              passthrough: {}
+        regexRewrite:
+          pattern:
+            regex: '\/epro\/v1\/payment\/\b[a-zA-Z-_%+0-9]*\b\/$'
+          substitution: '/payment'
+    - matchers:
+      - methods:
+          - POST
+        regex: \/epro\/v1\/subject
+      routeAction:
+        single:
+          destinationSpec:
+            rest:
+              functionName: validateSubject
+          upstream:
+            name: {{ $eproSvcUpstream }}
+            namespace: {{ .Values.gloo_namespace }}
+      options:
+        transformations:
+          requestTransformation:
+            transformationTemplate:
+              passthrough: {}
+        regexRewrite:
+          pattern:
+            regex: '\/epro\/v1'
+          substitution: '\/'
+    - matchers:
+      - methods:
+          - POST
+        regex: \/epro\/v1\/subject/
+      routeAction:
+        single:
+          destinationSpec:
+            rest:
+              functionName: validateSubject
+          upstream:
+            name: {{ $eproSvcUpstream }}
+            namespace: {{ .Values.gloo_namespace }}
+      options:
+        transformations:
+          requestTransformation:
+            transformationTemplate:
+              passthrough: {}
+        regexRewrite:
+          pattern:
+            regex: '\/epro\/v1'
+          substitution: '\/'
+    - matchers:
+      - methods:
+          - POST
+        regex: \/epro\/v1\/subject\/\b[a-zA-Z-_%+0-9]*\b$
+      routeAction:
+        single:
+          destinationSpec:
+            rest:
+              functionName: validateSubject
+          upstream:
+            name: {{ $eproSvcUpstream }}
+            namespace: {{ .Values.gloo_namespace }}
+      options:
+        transformations:
+          requestTransformation:
+            transformationTemplate:
+              passthrough: {}
+        regexRewrite:
+          pattern:
+            regex: '\/epro\/v1\/subject\/\b[a-zA-Z-_%+0-9]*\b$'
+          substitution: '/subject'
+    - matchers:
+      - methods:
+          - POST
+        regex: \/epro\/v1\/subject\/\b[a-zA-Z-_%+0-9]*\b\/$
+      routeAction:
+        single:
+          destinationSpec:
+            rest:
+              functionName: validateSubject
+          upstream:
+            name: {{ $eproSvcUpstream }}
+            namespace: {{ .Values.gloo_namespace }}
+      options:
+        transformations:
+          requestTransformation:
+            transformationTemplate:
+              passthrough: {}
+        regexRewrite:
+          pattern:
+            regex: '\/epro\/v1\/subject\/\b[a-zA-Z-_%+0-9]*\b\/$'
+          substitution: '/subject'
+    - matchers:
+      - methods:
+          - GET
+        regex: /epro/v1/payment/\b[0-9a-f]{8}\b-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-\b[0-9a-f]{12}\b(/)?$
+      routeAction:
+        single:
+          destinationSpec:
+            rest:
+              functionName: getPaymentStatus
+          upstream:
+            name: {{ $eproSvcUpstream }}
+            namespace: {{ .Values.gloo_namespace }}
+      options:
+        transformations:
+          requestTransformation:
+            transformationTemplate:
+              passthrough: {}
+        regexRewrite:
+          pattern:
+            regex: '/epro/v1'
+          substitution: '/'
+    - matchers:
+      - methods:
+          - GET
+        regex: /epro/v1/payment/\b[0-9a-fA-F]{32}\b(/)?$
+      routeAction:
+        single:
+          destinationSpec:
+            rest:
+              functionName: getPaymentStatus
+          upstream:
+            name: {{ $eproSvcUpstream }}
+            namespace: {{ .Values.gloo_namespace }}
+      options:
+        transformations:
+          requestTransformation:
+            transformationTemplate:
+              passthrough: {}
+        regexRewrite:
+          pattern:
+            regex: '/epro/v1'
+          substitution: '/'
+    - matchers:
+      - exact: /epro/v1/swagger.json
+        methods:
+          - GET
+      routeAction:
+        single:
+          upstream:
+            name: {{ $eproSvcUpstream }}
+            namespace: {{ .Values.gloo_namespace }}
+      options:
+        regexRewrite:
+          pattern:
+            regex: '\/epro\/v1'
+          substitution: '\/'
+    # SwaggerUI VirtualService
+    {{- if eq .Values.virtualservice.swaggerui.enabled true }}
+    - matchers:
+      - prefix: '/swagger'
+      routeAction:
+        single:
+          upstream:
+            name: {{ $swaggeruiUpstream }}
+            namespace: {{ .Values.gloo_namespace }}
+      options:
+        prefixRewrite: '/'
+    {{- end }}
+{{- end -}}

@@ -1,0 +1,17 @@
+apiVersion: v2
+name: paymentgateway
+description: Helm chart with the paymentgateway definition
+type: application
+version: 0.4.5
+appVersion: "1.0"
+maintainers:
+- name: Helene McElroy
+  email: helene.mcelroy@greenphire.com
+- name: Jeisson Osorio
+  email: jeisson.osorio@greenphire.com
+- name: Thuy Hoang
+  email: thuy.hoang@greenphire.com
+keywords:  
+  - payment
+  - payment-gateway
+  - rabbit-mq

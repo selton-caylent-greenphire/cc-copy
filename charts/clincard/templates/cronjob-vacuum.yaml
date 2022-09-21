@@ -1,0 +1,38 @@
+apiVersion: batch/v1beta1
+kind: CronJob
+metadata:
+  labels: {{ include "service.labels" . | nindent 4}}
+  name: vacuum-clincard
+spec:
+  schedule: {{ default "0 4 * * *" ((.Values.vacuum).schedule) }}
+  concurrencyPolicy: {{ default "Forbid" ((.Values.vacuum).concurrencyPolicy) }}
+  successfulJobsHistoryLimit: {{ default 1 ((.Values.vacuum).successfulJobsHistoryLimit) }}
+  failedJobsHistoryLimit: {{ default 3 ((.Values.vacuum).failedJobsHistoryLimit) }}
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: task
+            resources:
+              requests:
+                memory: {{ default "512Mi" ((((.Values.vacuum).resources).request).memory) }}
+                cpu: {{ default "200m" ((((.Values.vacuum).resources).request).cpu) }}
+            image: {{ default "postgres:10" ((.Values.vacuum).image) }}
+            command: ["/usr/bin/psql"]
+            args:
+              - "-d"
+              - '{{ include "pdb" . }}'
+              - "-c"
+              - "VACUUM ANALYZE;"
+            env:
+            - name: PGUSER
+              value: {{ include "pusr" . }}
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ template "service.secret" . }}
+                  key: postgres-{{ include "pusr" . }}
+            - name: PGHOST
+              value: {{ printf "%s.%s" (include "psvc" .) .Release.Namespace }}
+          restartPolicy: OnFailure

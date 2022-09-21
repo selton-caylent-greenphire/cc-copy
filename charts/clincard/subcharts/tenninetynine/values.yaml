@@ -1,0 +1,31 @@
+name: tenninetynine
+nameOverride: tenninetynine
+fullnameOverride: tenninetynine
+
+tier: reports
+
+image: 160116585046.dkr.ecr.us-east-1.amazonaws.com/clincard/tenninetynine-service:2.0.0
+
+resources:
+  service:
+    replicas: 2
+    limits:
+      cpu: 500m
+      memory: 256Mi
+    requests:
+      cpu: 10m
+      memory: 64Mi
+
+ingress:
+  enabled: false
+  port: 8080
+  path: /ten99
+
+# The below values can be overridden by parent chart global values. 
+# See clincard chart values.yaml file.
+couchdb:
+  user: admin
+  service: couchdb-ha-svc-couchdb
+  db_pis: paymentindex
+hosts:
+  apiinternal: api-internal.clincard.com

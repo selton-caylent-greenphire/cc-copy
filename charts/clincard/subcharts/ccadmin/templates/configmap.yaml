@@ -1,0 +1,21 @@
+{{ if .Values.configMapJson }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "ccadmin.fullname" . }}
+  labels: {{ include "ccadmin.labels" . | nindent 4 }} 
+data:
+  ccadmin.conf: |-
+    server {
+        listen  {{ default "80" .Values.configMapJson.listen }};
+        charset {{ default "utf-8" .Values.configMapJson.charset }};
+        sendfile {{ default "on" .Values.configMapJson.sendfile }};
+        root  {{ default "/usr/share/nginx/html" .Values.configMapJson.root }};
+        location / {
+            expires {{ default "-1" .Values.configMapJson.expires }};
+            add_header Pragma "no-cache";
+            add_header Cache-Control "no-store, no-cache, must-revalidate, post-check=0, pre-check=0";
+            try_files $uri $uri/ /index.html = 404;
+        }
+    }  
+{{- end }}

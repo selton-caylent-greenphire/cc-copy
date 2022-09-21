@@ -1,0 +1,9 @@
+name: redis
+image: library/redis:5.0
+port: 6379
+replicas: 1
+service: true
+externalService: true
+dependencies:
+  # -- Secrets dependency to define the redis password
+  redisSecrets: redis

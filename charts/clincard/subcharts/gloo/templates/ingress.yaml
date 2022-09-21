@@ -1,0 +1,32 @@
+{{- $host := get (include "hosts" . | fromJson) "apigateway" -}}
+{{- $serviceName := .Values.ingress.gateway -}}
+{{- $servicePort := .Values.ingress.port -}}
+{{- $path := .Values.ingress.path -}}
+{{- if eq .Values.ingress.enabled true -}}
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: {{ .Release.Namespace }}-gloo-ingress
+  namespace: {{ .Values.gloo_namespace }}
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+  labels:
+    app: {{ template "gloo.name" . }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+spec:
+  tls:
+  - hosts:
+    - {{ $host }}
+    secretName: nginx-cert
+  rules:
+  - http:
+      paths:
+      - path: /
+        backend:
+          serviceName: {{ $serviceName }}
+          servicePort: {{ $servicePort }}
+    host: {{ $host }}
+{{- end -}}

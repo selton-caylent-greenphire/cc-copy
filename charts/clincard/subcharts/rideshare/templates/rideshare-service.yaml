@@ -1,0 +1,21 @@
+{{- if and .Values.rideshareService  .Values.rideshareService.service.enabled}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "rideshare.svc.fullname" . }}
+  labels: {{ include "rideshare.svc.labels" . | nindent 4 }}
+spec:
+  selector: {{ include "rideshare.svc.selectorLabels" . | nindent 4 }}   
+  ports:    
+    - name: {{ default "http" .Values.rideshareService.service.portName | quote }}
+      port: {{ default 8080 .Values.rideshareService.service.port }}
+      protocol: {{ default "TCP" .Values.rideshareService.service.protocol }}
+      targetPort: {{ default 8080 .Values.rideshareService.service.targetPort }}
+  sessionAffinity: {{ default "None" .Values.rideshareService.service.sessionAffinity }}
+{{- if .Values.rideshareService.service.clusterIP }}
+  clusterIP: {{ .Values.rideshareService.service.clusterIP }}
+{{- else }}
+  type: {{ default "ClusterIP" .Values.rideshareService.service.type }}
+{{- end }}
+{{- end }}

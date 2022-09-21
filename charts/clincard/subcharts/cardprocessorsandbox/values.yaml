@@ -1,0 +1,58 @@
+nameOverride: cardprocessorsandbox
+fullnameOverride: cardprocessorsandbox
+secretpath: lower
+tier: api
+enabled: false
+
+image: 160116585046.dkr.ecr.us-east-1.amazonaws.com/clincard/cardprocessorsandbox:0.9.0
+
+dependencies:
+  # -- Service dependency [redis](https://github.com/Greenphire/clincard-config/tree/uat/)
+  redis: redis
+
+customEnv:
+  CONFIG_FILE_PATH: /config/config.json
+  SANDBOX_USER_ID: sandman
+  SANDBOX_ECODE: "10124370"
+  SANDBOX_PASSWORD: thesandboxpassword
+
+replicas: 1
+resources:
+  limits:
+    cpu: 1
+    memory: 2Gi
+  requests:
+    cpu: 10m
+    memory: 64M
+
+rollingUpdateDeploymentStrategy:
+  enabled: true
+
+configMapJson:
+- dataKey: config.json
+  dataKeyTemplateSrc: "/_configmap.json.tpl"
+  loggerServiceName: cardprocessorsandbox
+  gunicornBlock: true
+
+service:
+  enabled: false
+  port: 8080      
+  clusterIP: None
+  
+readinessProbe:
+  failureThreshold: 3
+  httpGet:
+    path: /
+    port: 8080
+    scheme: HTTP
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  successThreshold: 1
+  timeoutSeconds: 5
+
+volumes:
+  configName: config
+  configDefaultMode: 420
+
+serviceAccount:
+  create: false

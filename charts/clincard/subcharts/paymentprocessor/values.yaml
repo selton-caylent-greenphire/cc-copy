@@ -1,0 +1,82 @@
+name: paymentprocessor
+nameOverride: paymentprocessor
+fullnameOverride: paymentprocessor
+image: 160116585046.dkr.ecr.us-east-1.amazonaws.com/clincard/paymentprocessor:2.2.2
+tier: payments
+secretpath: lower
+
+replicaCount: 2
+progressDeadlineSeconds: 600
+rollingUpdate:
+  maxSurge: "1"
+  maxUnavailable: "1"
+revisionHistoryLimit: 10
+resources:
+  limits:
+    cpu: 250m
+    memory: 1Gi
+  requests:
+    cpu: 50m
+    memory: 256Mi
+
+configMapJson:
+  - dataKey: config.json
+    dataKeyTemplateSrc: "/_configmap.json.tpl"
+    loggerServiceName: paymentprocessor
+
+volumes:
+- configMap:
+    defaultMode: 420
+    items:
+    - key: config.json
+      path: config.json
+    name: paymentprocessor
+  name: config
+
+volumeMounts:
+- mountPath: /config
+  name: config
+
+hostAliases:
+- hostnames:
+  - xmlgateway.metavante.org
+  ip: 192.168.112.90
+
+jira:
+  enabled: false
+  user: developermailbox@greenphire.com
+
+serviceAccount:
+  create: false
+  name: ""
+
+dependencies:
+  paymentevents: paymentevents
+  paymentdomain: paymentdomain
+  clincardsecrets: clincard-secret
+  rabbitsecrets: rabbit-secret
+  paymentindexsecrets: paymentindex-consumer
+  redissecrets: redis
+
+# The below values can be overridden by parent chart global values.
+# See clincard chart values.yaml file.
+postgres:
+  image: bitnami/postgresql:11.6.0-debian-9-r0
+
+portaldb:
+  service: portaldb-postgres
+  database: ccportaldatabase
+  username: paymentprocessor
+  db_admin: clincard
+
+rabbit:
+  username: payments
+  service: rabbit-rabbitmq-ha
+
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 40
+  rabbitmqMetricName: payment_processing-queue-length
+  rabbitmqQueueName: payment_processing
+  rabbitmqTargetValue: 25

@@ -1,0 +1,13 @@
+apiVersion: v2
+name: rideshare
+description: Helm chart with the rideshare definition
+type: application
+version: 0.1.7
+appVersion: "0.2.1"
+maintainers:
+- name: Helene McElroy
+  email: helene.mcelroy@greenphire.com
+- name: Jeisson Osorio
+  email: jeisson.osorio@greenphire.com
+keywords:  
+  - rideshare

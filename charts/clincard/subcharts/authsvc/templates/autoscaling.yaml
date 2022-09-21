@@ -1,0 +1,64 @@
+{{- if and .Values.autoscaling .Values.autoscaling.enabled .Values.autoscaling.cpuTargetValue }}
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: {{ include "authsvc.fullname" . }}-cpu-scaledobject
+  labels: {{ include "authsvc.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef: {{ include "authsvc.autoscaling.scaleTargetRef" . | nindent 4 }}
+  minReplicaCount: {{ default 2 .Values.autoscaling.minReplicas }}
+  maxReplicaCount: {{ default 10 .Values.autoscaling.maxReplicas }}
+  pollingInterval: {{ default 30 .Values.autoscaling.pollingInterval }}
+  advanced:
+    horizontalPodAutoscalerConfig:
+      behavior:
+        scaleUp:
+          stabilizationWindowSeconds: 0
+          policies:
+          - type: Pods
+            value: {{ default 1 .Values.autoscaling.podsPerScaling }}
+            periodSeconds: {{ default 60 .Values.autoscaling.scalingUpInterval }}
+        scaleDown:
+          stabilizationWindowSeconds: 300
+          policies:
+          - type: Pods
+            value: {{ default 1 .Values.autoscaling.podsPerScaling }}
+            periodSeconds: {{ default 60 .Values.autoscaling.scalingDownInterval }}
+  triggers:
+  - type: cpu
+    metricType: {{ default "Utilization" .Values.autoscaling.metricType }}
+    metadata: {{ include "authsvc.autoscaling.cpu.triggerMetadata" . | nindent 6 }}
+{{- end }}
+{{- if and .Values.autoscaling .Values.autoscaling.enabled .Values.autoscaling.memoryTargetValue }}
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: {{ include "authsvc.fullname" . }}-memory-scaledobject
+  labels: {{ include "authsvc.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef: {{ include "authsvc.autoscaling.scaleTargetRef" . | nindent 4 }}
+  minReplicaCount: {{ default 2 .Values.autoscaling.minReplicas }}
+  maxReplicaCount: {{ default 10 .Values.autoscaling.maxReplicas }}
+  pollingInterval: {{ default 30 .Values.autoscaling.pollingInterval }}
+  advanced:
+    horizontalPodAutoscalerConfig:
+      behavior:
+        scaleUp:
+          stabilizationWindowSeconds: 0
+          policies:
+          - type: Pods
+            value: {{ default 1 .Values.autoscaling.podsPerScaling }}
+            periodSeconds: {{ default 60 .Values.autoscaling.scalingUpInterval }}
+        scaleDown:
+          stabilizationWindowSeconds: 300
+          policies:
+          - type: Pods
+            value: {{ default 1 .Values.autoscaling.podsPerScaling }}
+            periodSeconds: {{ default 60 .Values.autoscaling.scalingDownInterval }}
+  triggers:
+  - type: memory
+    metricType: {{ default "Utilization" .Values.autoscaling.metricType }}
+    metadata: {{ include "authsvc.autoscaling.memory.triggerMetadata" . | nindent 6 }}
+{{- end }}

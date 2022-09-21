@@ -1,0 +1,42 @@
+nameOverride: swagger-ui
+fullnameOverride: swagger-ui
+tier: api
+
+image: swaggerapi/swagger-ui
+
+configMaps:
+  - dataKey: index.html
+    dataKeyTemplateSrc: "/_configmap.static.tpl"
+    urls:
+      - endpoint: /epro/v1/swagger.json
+        name: ePro Service
+      - endpoint: /study/v1/swagger.json
+        name: Study Service
+      - endpoint: /subject/v1/swagger.json
+        name: Subject Service
+
+service:
+  enabled: true
+  port: 8080
+
+volumes:
+  - name: template
+    configMap:
+      name: swagger-ui-template
+      items:
+      - key: index.html
+        path: index.html
+
+serviceAccount:
+  create: false
+  name: ""
+
+rollingUpdateDeploymentStrategy:
+  enabled: true
+  maxSurge:
+  maxUnavailable:
+
+replicaCount: 2
+
+autoscaling:
+  enabled: false

@@ -1,0 +1,14 @@
+apiVersion: v2
+name: subject-svc
+description: Helm chart with the subject-svc definition
+type: application
+version: 0.4.5
+appVersion: "1.0"
+maintainers:
+- name: Helene McElroy
+  email: helene.mcelroy@greenphire.com
+- name: Jeisson Osorio
+  email: jeisson.osorio@greenphire.com
+keywords:  
+  - subject-svc
+  - external_apis

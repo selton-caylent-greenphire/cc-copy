@@ -1,0 +1,65 @@
+nameOverride: antivir
+fullnameOverride: antivir
+secretpath: lower
+tier: api
+
+clamav:
+  enabled: true
+  image: mkodockx/docker-clamav
+  service:
+    enabled: true    
+    port: 3310
+  resourcesLimitsCpu: 250m
+  resourcesLimitsMemory: 2Gi
+  resourcesRequestsCpu: 50m
+  resourcesRequestsMemory: 512Mi
+
+scanner: 
+  enabled: true
+  image: 160116585046.dkr.ecr.us-east-1.amazonaws.com/clincard/virusscanning:1.1.0
+  service:
+    enabled: true    
+    port: 3320  
+  configMapJson:
+  - dataKey: config.json
+    dataKeyTemplateSrc: "/_configmap.json.tpl"
+    loggerServiceName: virus-scanningsvc
+  
+  resourcesLimitsCpu: 400m
+  resourcesLimitsMemory: 512Mi
+  resourcesRequestsCpu: 20m
+  resourcesRequestsMemory: 256Mi
+  
+  readinessProbe:
+    failureThreshold: 3
+    httpGet:
+      path: /swagger.json
+      port: 3320
+      scheme: HTTP
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    successThreshold: 1
+    timeoutSeconds: 5
+
+  livenessProbe:
+    failureThreshold: 3
+    httpGet:
+      path: /swagger.json
+      port: 3320
+      scheme: HTTP
+    initialDelaySeconds: 30
+    periodSeconds: 30
+    successThreshold: 1
+    timeoutSeconds: 5
+
+serviceAccount:
+  create: false 
+  name: ""         
+
+dnsPolicy: ClusterFirst
+restartPolicy: Always
+schedulerName: default-scheduler    
+terminationGracePeriodSeconds: 30
+
+rollingUpdateDeploymentStrategy:
+  enabled: true

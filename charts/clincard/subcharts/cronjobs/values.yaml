@@ -1,0 +1,577 @@
+nameOverride: cronjobs
+fullnameOverride: cronjobs
+tier: cronjobs
+
+# -- Default clincard cronjobs image
+image: 160116585046.dkr.ecr.us-east-1.amazonaws.com/clincard/clincard:task-13.3.1
+imagePullPolicy: Always
+suspend: false
+restartPolicy: OnFailure
+concurrencyPolicy: Forbid
+schedulerName: default-scheduler
+# -- Used to set the DEBUG environment variable for all CronJobs
+enableDebug: false
+
+# -- History limits that apply for all cronJobs
+historyLimits:
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+
+resources:
+  # --  Default CronJobs resources: To change specific cronjob add the values in the parameters resourcesLimitsCpu, resourcesLimitsMemory.
+  limits:
+    cpu: 256m
+    memory: 256Mi
+  # --  Default CronJobs resources: To change specific cronjob add the values in the parameters resourcesRequestsCpu, resourcesRequestsMemory.
+  requests:
+    cpu: 20m
+    memory: 128Mi
+
+# Common values used in the _commons_env.yaml.tpl for all cronjobs
+commonEnv:
+  emailHost: smtp.sendgrid.net
+  emailHostUser: "apikey"
+  emailNoLogin: "0" 
+  emailPort: "587"
+  emailUseTls: "1"
+
+# Common values used in the _commons_password_manager_env.yaml.tpl and _commons_wf_env.yaml.tpl
+commonPassManagerEnv:
+  accountName: clincardsftp
+  certDir: /root/.pmp/
+  hostName: locker.greenphire.net  
+  port: 7070
+
+# Common values used in the _commons_wf_env.yaml.tpl
+commonWfEnv:  
+  enablePayments: 'True'
+  s3BucketRegionName: 'us-east-1'
+
+dependencies:
+  # -- Service dependency [configsvc](https://github.com/Greenphire/clincard-config/tree/uat/charts/clincard/subcharts/configsvc)
+  configsvc: configsvc
+  # -- Service dependency [paymentapprovals](https://github.com/Greenphire/clincard-config/tree/uat/charts/clincard/subcharts/paymentapprovals)
+  paymentapprovals: paymentapprovals
+  # -- Service dependency [rideshare](https://github.com/Greenphire/clincard-config/tree/uat/charts/clincard/subcharts/rideshare)
+  ridesharesvc: rideshare-svc
+  # -- Service dependency [taxablereport](https://github.com/Greenphire/clincard-config/tree/uat/charts/clincard/subcharts/taxablereport)
+  taxablereport: taxablereport
+  # -- Service dependency [tenninetynine](https://github.com/Greenphire/clincard-config/tree/uat/charts/clincard/subcharts/tenninetynine)
+  tenninetynine: tenninetynine
+  # -- Secrets dependency [clincard](https://github.com/Greenphire/clincard-config/tree/uat/charts/clincard)
+  clincardsecrets: clincard-secret
+  # -- Secrets dependency [cc-ssh-key] (https://github.com/Greenphire/clincard-config/tree/uat/charts/clincard/templates)
+  ccsshsecrets: cc-ssh-key
+  # -- Secrets dependency [peoples-trust-ftp] (https://github.com/Greenphire/clincard-config/tree/uat/charts/clincard/templates)
+  peoplestrustftp: peoples-trust-ftp
+  # -- Secrets dependency [tpl-secrets] (https://github.com/Greenphire/clincard-config/tree/uat/charts/clincard/templates)
+  tplsecrets: tpl-secrets
+  # -- Secrets dependency [password-manager] (https://github.com/Greenphire/clincard-config/tree/uat/charts/clincard/templates)
+  passmanagersecrets: password-manager
+  # -- Secrets dependency [fis-gpg-key] (https://github.com/Greenphire/clincard-config/tree/uat/charts/clincard/templates)
+  fisgpgsecrets: fis-gpg-key
+  # -- Secrets dependency [fis-ssh-key] (https://github.com/Greenphire/clincard-config/tree/uat/charts/clincard/templates)
+  fissshsecrets: fis-ssh-key
+  # -- Secrets dependency [clincard](https://github.com/Greenphire/clincard-config/tree/uat/charts/clincard/subcharts/paymentdomain)
+  paymentdomainsecrets: paymentdomain
+  # -- Secrets dependency [rideshare](https://github.com/Greenphire/clincard-config/tree/uat/charts/clincard/subcharts/rideshare)
+  ridesharesecrets: rideshare-secrets
+  # -- Secrets dependency [rabbit-secret](https://github.com/Greenphire/clincard-config/tree/uat/)
+  rabbitsecrets: rabbit-secret
+  # -- Service dependency [paymentevents](https://github.com/Greenphire/clincard-config/tree/uat/charts/clincard/subcharts/paymentevents)
+  paymentevents: paymentevents
+  # -- Service dependency [paymentdomain](https://github.com/Greenphire/clincard-config/tree/uat/charts/clincard/subcharts/paymentdomain)
+  paymentdomain: paymentdomain
+  # -- Service dependency [redis](https://github.com/Greenphire/clincard-config/tree/uat/)
+  redis: redis
+
+# Volumes dependencies used by some cronjobs
+volumes:
+  ccSshName: cc-ssh
+  ccSshMountPath: /root/.ssh
+  ccSshDefaultMode: 384  
+  mediaName: media
+  mediaMountPath: /clincard/media/clinclient/studies/receipts
+  mediaClaim: clincard-efs-%s-media
+  mediaUploadName: media-uploads
+  mediaUploadMountPath: /clincard/media/uploads
+  mediaUploadClaim: clincard-%s-media-uploads
+  dataName: data
+  dataMountPath: /clincard/data
+  dataClaim: clincard-efs-%s-data
+  pmpName: pmp-vol
+  pmpMountPath: /root/.pmp
+  pmpDefaultMode: 384
+  fisSshName: fis-ssh
+  fisSshMountPath: /root/.ssh
+  fisSshDefaultMode: 384  
+  fisGpgName: fis-gpg
+  fisGpgMountPath: /root/.gnupg_key
+  fisGpgDefaultMode: 384
+  pgpName: pgp
+  pgpMountPath: /.pgp
+  pgpClaim: clincard-efs-%s-pgp
+
+# -- The below values can be overridden by parent chart global values. 
+# See clincard chart values.yaml file.
+portaldb:
+  service: portaldb-postgres
+  database: ccportaldatabase
+  username: cronjobs
+  db_admin: clincard
+
+celery:
+  enable: false
+  username: celery
+  service: rabbit-rabbitmq-ha
+
+rabbit:
+  username: payments
+  service: rabbit-rabbitmq-ha
+  adminuser: admin
+
+jira:
+  enabled: false
+  user: developermailbox@greenphire.com
+  greenphire_system_user: 557058:ea63d1b6-7134-452c-8107-51626e1291b3
+  
+db:
+  service: microservicedb-postgres
+  username: clincard
+  db_admin: clincard
+
+# Start below cronJobs definition configuration.
+# paymentProcessingAlert cronJob definition.
+paymentProcessingAlert:
+  enabled: false
+  name: payment-processing-threshold-alert
+  args: ["python", "/clincard/scripts/cron/payment_processing_threshold_alert.py"]
+  schedule: 0 13 * * *  
+
+# pendingPaymentsNotification cronJob definition.
+pendingPaymentsNotification:
+  enabled: false
+  name: pending-payments-notification
+  args: ["python", "/clincard/scripts/cron/pending_payment_notification.py"]
+  schedule: 5 * * * 1-5
+  resourcesLimitsMemory: 4Gi
+
+# recentPaymentActivityEmail cronJob definition.
+recentPaymentActivityEmail:
+  enabled: false
+  name: recent-payment-activity-email
+  args: ["python", "/clincard/scripts/cron/recent_payment_activity_email.py"]  
+  schedule: 5 20 * * 1-5 
+  restartPolicy: Never  
+  backoffLimit: "0"
+  resourcesLimitsMemory: 4Gi
+
+# depositStatusAlert cronJob definition.
+depositStatusAlert:
+  enabled: false
+  name: deposit-status-alert
+  args: ["python", "/clincard/scripts/cron/deposit_status_alert.py"]
+  schedule: 0 12 * * *
+
+# negativeBalanceReport cronJob definition.
+negativeBalanceReport:
+  enabled: false
+  name: negative-balance-report
+  args: ["python", "/clincard/scripts/reports/negative_balance_report.py"]
+  schedule: 0 14 * * 1
+
+# nonUsdDepositsReport cronJob definition.
+nonUsdDepositsReport:
+  enabled: false
+  name: non-usd-deposits-report
+  args: ["python", "/clincard/scripts/cron/non_usd_deposits_report.py"]
+  schedule: 0 12 * * *    
+
+# sendIssuanceFundingReport cronJob definition.
+sendIssuanceFundingReport:
+  enabled: false
+  name: send-issuance-funding-report
+  args: ["python", "/clincard/scripts/cron/send_issuance_funding_report.py"]
+  schedule: 30 12 * * *
+
+# i2cCardCreationProcessor cronJob definition.
+i2cCardCreationProcessor:
+  enabled: false
+  name: i2c-card-creation-processor
+  args: ["python", "/clincard/scripts/cron/i2c_card_creation_processor.py"]
+  schedule: "0 10,22 * * *"
+  customEnv:
+    XFR_HOST: "xfrtest.greenphire.com"
+  resourcesRequestsCpu: 250m
+  resourcesRequestsMemory: 256Mi
+  resourcesLimitsCpu: 1500m
+  resourcesLimitsMemory: 8Gi
+
+# i2cCardSummaryProcessor cronJob definition.
+i2cCardSummaryProcessor:
+  enabled: false
+  name: i2c-card-summary-processor
+  args: ["python", "/clincard/scripts/cron/i2c_card_summary_processor.py"]
+  schedule: "0 10,22 * * *"
+  customEnv:
+    XFR_HOST: "xfrtest.greenphire.com"
+  resourcesRequestsCpu: 250m
+  resourcesRequestsMemory: 256Mi
+  resourcesLimitsCpu: 1500m
+  resourcesLimitsMemory: 8Gi
+
+# i2cForexProcessorCanadaPt cronJob definition.
+i2cForexProcessorCanadaPt:
+  enabled: false
+  name: i2c-forex-processor-canada-pt
+  args: ["python", "/clincard/scripts/cron/i2c_forex_processor.py"]
+  schedule: "0 10,22 * * *"
+  customEnv:
+    I2C_FOREX_HOST: sftpp.peoplemft.opentext.cloud:10022
+    I2C_FOREX_PATH: Home/greenphire01/Inbound
+
+# i2cForexProcessorCorrections cronJob definition.
+i2cForexProcessorCorrections:
+  enabled: false
+  name: i2c-forex-processor-corrections
+  args: ["python", "/clincard/scripts/cron/i2c_forex_processor.py"]
+  schedule: "0 0 1 1 0"
+  customEnv:
+    I2C_FOREX_HOST: xfrtest.greenphire.com
+    I2C_FOREX_PATH: vendor_file_corrections/to_greenphire
+    I2C_FOREX_MULTIFACTOR: "False"
+    I2C_FOREX_FILENAME: TPL_GP_FIN_FXDAILY  
+
+# i2cForexProcessorEuropeTpl cronJob definition.
+i2cForexProcessorEuropeTpl:
+  enabled: false
+  name: i2c-forex-processor-europe-tpl
+  args: ["python", "/clincard/scripts/cron/i2c_forex_processor.py"]
+  schedule: "0 10,22 * * *"
+  customEnv:
+    I2C_FOREX_HOST: "195.244.198.81:9822"
+    I2C_FOREX_PATH: From_tpl
+    I2C_FOREX_MULTIFACTOR: "True"
+    I2C_FOREX_FILENAME: TPL_GP_FIN_FXDAILY    
+    
+# monthlyInventoryControlReport cronJob definition.
+monthlyInventoryControlReport:
+  enabled: false
+  name: monthly-inventory-control-report
+  args: ["python", "/clincard/scripts/cron/monthly_inventory_control_report.py"]
+  schedule: 30 11 1 * *
+  customEnv:
+    JIRA_ASSIGNEE: 5a0469b387c3eb1913c47dbd
+    CRON_K8S_REPORT_RECIPIENTS: "clincard@greenphire.com,jared.steenhoff@greenphire.com,keinan.fry@greenphire.com"
+
+# processTransferFundsTickets cronJob definition.
+processTransferFundsTickets:
+  enabled: false
+  name: process-transfer-funds-tickets
+  args: ["python", "/clincard/scripts/cron/process_transfer_funds_tickets.py"]
+  schedule: "*/10 * * * *"
+  customEnv:
+    JIRA_ASSIGNEE: "null"    
+
+# travelModuleDaily cronJob definition.
+travelModuleDaily:
+  enabled: false
+  name: travel-module-daily
+  args: ["python", "/clincard/scripts/cron/travel_module_daily.py"]
+  schedule: 0 16 * * *
+  customEnv:
+    DISABLE_MEMOIZE: "True"
+    JIRA_ASSIGNEE: 557058:809f6df1-f9ea-4155-a2ba-1258e675a738    
+
+# travelModuleHourly cronJob definition.
+travelModuleHourly:
+  enabled: false
+  name: travel-module-hourly
+  args: ["python", "/clincard/scripts/cron/travel_module_hourly.py"]
+  schedule: 0 * * * *
+  customEnv:
+    DISABLE_MEMOIZE: "True"
+    JIRA_ASSIGNEE: 557058:809f6df1-f9ea-4155-a2ba-1258e675a738
+    
+# cbOrderMonitoring cronJob definition.
+cbOrderMonitoring:
+  enabled: false
+  name: cb-order-monitoring
+  args: ["python", "/clincard/scripts/cron/cb_order_monitoring.py"]
+  schedule: 10 * * * *
+  customEnv:
+    PASSWORD_MANAGER_RESOURCE_ID: "601"
+    HOME: /root
+    PCI_SERVER_DIR: /home/ccshared/
+    PCI_SERVER_HOST: "fisdev.clincard.com"
+    PCI_SERVER_USER: clincardsftp
+  hostAliases:
+    - names: ["locker.greenphire.net"]
+      ip: 10.100.16.101
+
+# cbSendOrders cronJob definition.
+cbSendOrders:
+  enabled: false
+  name: cb-send-orders
+  args: ["python", "/clincard/scripts/cron/cb_send_orders.py"]
+  schedule: 30 20 * * *
+  customEnv:
+    PASSWORD_MANAGER_RESOURCE_ID: "601"
+    FIS_HOSTNAME: sftp.greenphire.com
+    FIS_USER: autotest_fis
+    FIS_FTP_DIR: /Cardbase/TOFIS/    
+    FIS_PUBLIC_KEY: /root/.gnupg_key/fis_pub_key.asc
+    FIS_UIDS: Enterprise.Transmission.Group@fisglobal.com
+  hostAliases:    
+    - names: ["locker.greenphire.net"]
+      ip: 10.100.16.101
+    - names: ["sftp.greenphire.com"]
+      ip: 10.25.23.28
+
+# runDupePaymentsCheck cronJob definition.
+runDupePaymentsCheck:
+  enabled: false
+  name: run-dupe-payments-check
+  args: ["python", "/clincard/scripts/cron/dupe_checker_non_batch.py"]
+  schedule: 0 1 * * 0
+  # -- Comma delimited list of client Primary Keys to run the dupe-checker against
+  client_ids: ''
+  # -- Comma delimited list of report recipients
+  recipients: ''
+  database: paymentdomain
+
+cardOrderReportMonthly:
+  enabled: false
+  name: card-order-report-monthly
+  args: ["/clincard/scripts/cron/card_order_report.py", "bm"]
+  schedule: 0 21 * * *
+  customEnv:
+    CRON_K8S_REPORT_RECIPIENTS: ""
+
+cardOrderReportWeeklySupport:
+  enabled: false
+  name: card-order-report-weekly-support
+  args: ["/clincard/scripts/cron/card_order_report.py", "w"]
+  schedule: 0 8 * * 0
+  customEnv:
+    CRON_K8S_REPORT_RECIPIENTS: ""
+
+cardOrderReportWeekly:
+  enabled: false
+  name: card-order-report-weekly
+  args: ["/clincard/scripts/cron/card_order_report.py", "w"]
+  schedule: 0 8 * * 1
+  customEnv:
+    CRON_K8S_REPORT_RECIPIENTS: ""
+
+i2cSubmitCardOrders:
+  enabled: false
+  name: i2c-submit-card-orders
+  schedule: "0 21 * * *"
+  args: ["python", "/clincard/scripts/cron/i2c_submit_card_orders.py"]
+
+i2cArroweyeShippingConfirmation:
+  enabled: false
+  name: i2c-arroweye-shipping-confirmation
+  schedule: "45 23 * * *"
+  args: ["python", "/clincard/scripts/cron/arroweye_shipping_confirmation.py"]
+  customEnv:
+    ARROWEYE_SFTP_SERVER: ""
+    ARROWEYE_SFTP_ROOT_DIR: ""
+
+fisArroweyeShippingConfirmation:
+  enabled: false
+  name: fis-arroweye-shipping-confirmation
+  schedule: "45 23 * * *"
+  args: ["python", "/clincard/scripts/cron/arroweye_shipping_confirmation.py"]
+  customEnv:
+    ARROWEYE_SFTP_SERVER: ""
+    ARROWEYE_SFTP_ROOT_DIR: null
+
+operationsShippingConfirmation:
+  enabled: false
+  name: operations-shipping-confirmation
+  schedule: "45 */4 * * *"
+  args: ["python", "/clincard/scripts/cron/arroweye_shipping_confirmation.py"]
+  customEnv:
+    ARROWEYE_SFTP_SERVER: ""
+    ARROWEYE_SFTP_ROOT_DIR: ""
+# amcCustomExtract cronJob definition.
+amcCustomExtract:
+  enabled: false
+  name: amc-custom-extract
+  args: ["python", "/clincard/scripts/reports/amc_custom_extract.py"]
+  schedule: 0 5 * * *
+  customEnv:
+    XFR_HOST: "xfrtest.greenphire.com"
+
+# biomarinWeeklyComplianceMessage cronJob definition.
+biomarinWeeklyComplianceMessage:
+  enabled: false
+  name: biomarin-165-304-weekly-compliance-message
+  args: ["python", "/clincard/scripts/cron/biomarin_165_304_weekly_compliance_message.py"]
+  schedule: 0 17 * * 1
+
+# duplicatePaymentAlert cronJob definition.
+duplicatePaymentAlert:
+  enabled: false
+  name: duplicate-payment-alert
+  args: ["python", "/clincard/scripts/detect_dupe_payments.py"]
+  schedule: "0 */2 * * *"
+
+# cbCardInfo cronJob definition.
+cbCardInfo:
+  enabled: false
+  name: cb-card-info
+  args: ["python", "/clincard/scripts/cron/cb_card_info.py"]
+  schedule: 33 8 * * *
+  customEnv:
+    PCI_SERVER_DIR: /home/ccshared/
+    PCI_SERVER_HOST: "10.150.17.181"
+    PCI_SERVER_USER: clincardsftp
+    PASSWORD_MANAGER_RESOURCE_ID: "601"
+  hostAliases:    
+  - names: ["xmlgateway.metavante.org", "ws2.mycardplace.com"]
+    ip: 192.168.112.90
+  - names: ["locker.greenphire.net"]
+    ip: 10.100.16.101
+  resourcesRequestsCpu: 250m
+  resourcesRequestsMemory: 1Gi
+  resourcesLimitsCpu: 1024m
+  resourcesLimitsMemory: 8Gi
+
+# columbiaPovertyUsageData cronJob definition.
+columbiaPovertyUsageData:
+  enabled: false
+  name: columbia-poverty-usage-data
+  args: ["python", "/clincard/scripts/cron/poverty_card_usage.py"]
+  schedule: 0 0 * * *
+
+# columbiaPovertyPayments cronJob definition.
+columbiaPovertyPayments:
+  enabled: false
+  name: columbia-poverty-payments
+  args: ["python", "/clincard/scripts/cron/columbia_poverty_payments.py"]
+  schedule: 0 0 * * *
+
+# wfPullFiles cronJob definition.
+wfPullFiles:
+  enabled: false
+  name: wf-pull-files
+  args: ["python", "/clincard/scripts/cron/apply_wf_pickle_info.py"]
+  schedule: 30 15 * * *
+  customEnv:
+    WF_S3BUCKET_BUCKET_NAME: cc-sqa-banking
+    PASSWORD_MANAGER_ACCOUNT_NAME: "clincard_xfr"
+    PASSWORD_MANAGER_RESOURCE_ID: "2101"
+    WF_SFTP_PROD_SERVER: "10.25.23.28"
+    WF_SFTP_USER: "clincard_xfr"
+  hostAliases:    
+    - names: ["locker.greenphire.net"]
+      ip: 10.100.16.101
+
+# wfPushFiles cronJob definition.
+wfPushFiles:
+  enabled: false
+  name: wf-push-files
+  args: ["python", "/clincard/scripts/cron/wf_push_files.py"]
+  schedule: 30 19 * * 1-5
+  customEnv:
+    WF_S3BUCKET_BUCKET_NAME: cc-sqa-banking
+    PASSWORD_MANAGER_ACCOUNT_NAME: "clincard_xfr"
+    PASSWORD_MANAGER_RESOURCE_ID: "2101"
+    WF_SFTP_PROD_SERVER: "10.25.23.28"
+    WF_SFTP_USER: "clincard_xfr"
+  hostAliases:
+    - names: ["locker.greenphire.net"]
+      ip: 10.100.16.101
+
+sendAppointmentReminders:
+  enabled: false
+  name: send-appointment-reminders
+  args: ["python", "/clincard/scripts/cron/appointment_reminders.py"]
+  schedule: "*/5 * * * *"
+  customEnv:
+    USE_DEMO_PG: "True"
+    PAYMENTS_EXCHANGE: payments
+    PAYMENTS_QUEUE: payment_processing
+
+sendBalanceRemindersFis:
+  enabled: false
+  name: send-balance-reminders-fis
+  args: ["python", "/clincard/scripts/cron/send_balance_reminders.py", "fis"]
+  schedule: "*/5 * * * *"
+  customEnv:
+    USE_DEMO_PG: "True"
+    PAYMENTS_EXCHANGE: payments
+    PAYMENTS_QUEUE: payment_processing
+    STATIC_URL: https://uat-static.clincard.com/
+    RIDESHARE_FEE: "6.0"
+
+sendBalanceRemindersI2cCan:
+  enabled: false
+  name: send-balance-reminders-i2c-can
+  args: ["python", "/clincard/scripts/cron/send_balance_reminders.py", "i2c_can"]
+  schedule: "0 12 * * *"
+
+
+sendBalanceRemindersI2cEU:
+  enabled: false
+  name: send-balance-reminders-i2c-eu
+  args: ["python", "/clincard/scripts/cron/send_balance_reminders.py", "i2c_eu"]
+  schedule: "0 5 * * *"
+  customEnv:
+    USE_DEMO_PG: "True"
+    PAYMENTS_EXCHANGE: payments
+    PAYMENTS_QUEUE: payment_processing
+    STATIC_URL: https://uat-static.clincard.com/
+    RIDESHARE_FEE: "6.0"
+
+
+sendBalanceRemindersI2cUS:
+  enabled: false
+  name: send-balance-reminders-i2c-us
+  args: ["python", "/clincard/scripts/cron/send_balance_reminders.py", "i2c_us"]
+  schedule: "0 5 * * *"
+  customEnv:
+    USE_DEMO_PG: "True"
+    PAYMENTS_EXCHANGE: payments
+    PAYMENTS_QUEUE: payment_processing
+    STATIC_URL: https://uat-static.clincard.com/
+    RIDESHARE_FEE: "6.0"
+
+smsHandler:
+  enabled: false
+  name: sms-handler
+  args: ["python", "/clincard/scripts/cron/sms_handler.py"]
+  schedule: '*/5 * * * *'
+
+# batchProcessorSftp cronJob definition.
+batchProcessorSftp:
+  enabled: false  
+  name: batch-processor-sftp
+  args: ["python", "/clincard/scripts/run_batch_processor.py"]
+  schedule: "*/30 * * * *"
+  resourcesRequestsCpu: 1024m
+  resourcesRequestsMemory: 3Gi  
+  resourcesLimitsCpu: 1024m
+  resourcesLimitsMemory: 5Gi
+  ccSshDefaultMode: "0600"
+  database: paymentdomain
+  customEnv:
+    XFR_HOST: 10.25.23.28
+    GNUPG_HOMEDIR: "/.pgp"
+    BATCHFILE_ADMIN_LIST: "clincard@greenphire.com"
+    BATCHFILE_ALERTS_ENABLED: "True"
+    BATCH_PAYMENT_SLEEP_LENGTH: ".2"
+    PAYMENTS_EXCHANGE: "payments"
+    PAYMENTS_QUEUE: "payment_processing"
+    RABBIT_QUEUE_LIMIT: "15"
+    RABBIT_MEMORY_USAGE_LIMIT: ".90"
+  # -- In this section, you could put secrets that must exist in clincard-secrets, 
+  # or you need to define them into the clincardsecrets block in the flux release file.  
+  customCCSecretsEnv:
+    # NAME_ENV_VAR: secret_key_name
+    RABBIT_PASS: rabbit_userpass
+    RABBIT_ADMIN_PASS: rabbit_adminpass
+    GOOGLE_MAPS_API_KEY: google_maps_api_key

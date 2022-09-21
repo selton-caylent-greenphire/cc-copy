@@ -1,0 +1,86 @@
+nameOverride: websockets-svc
+fullnameOverride: websockets-svc
+secretpath: lower
+tier: api
+
+image: 160116585046.dkr.ecr.us-west-2.amazonaws.com/websockets:1.0.0
+
+dependencies:
+  # -- Service dependency **Kong**
+  kongsvc: kong-kong-admin.kong
+  # -- Secret dependency **nginx-cert**
+  tlssecret: nginx-cert
+
+# The below values can be overridden by parent chart global values. 
+# See clincard chart values.yaml file.
+# Start - chart global values
+hosts:
+  ws: ws.clincard.com
+# end - chart global values
+
+dnsPolicy: ClusterFirst
+restartPolicy: Always
+schedulerName: default-scheduler
+securityContext: {}
+terminationGracePeriodSeconds: 30
+
+volumes:
+- name: config
+  configMap:
+    defaultMode: 420    
+    name: websockets-svc
+    items:
+    - key: config.json
+      path: config.json
+
+readinessProbe:
+  failureThreshold: 3
+  tcpSocket:
+    port: 5678
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  successThreshold: 1
+  timeoutSeconds: 5
+
+livenessProbe:
+  failureThreshold: 3
+  tcpSocket:
+    port: 5678
+  initialDelaySeconds: 30
+  periodSeconds: 30
+  successThreshold: 1
+  timeoutSeconds: 5
+
+configMapJson:
+- dataKey: config.json
+  dataKeyTemplateSrc: "/_configmap.json.tpl"
+  loggerServiceName: websockets-svc
+
+containerPort: 5678
+
+service:
+  enabled: true
+  port: 5678  
+  protocol: TCP
+  targetPort: 5678
+
+replicaCount: 1
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 1
+  targetCPUUtilizationPercentage: 80
+  targetMemoryUtilizationPercentage: 80
+
+serviceAccount:
+  create: false 
+  name: ""
+
+rollingUpdateDeploymentStrategy:
+  enabled: true
+  maxSurge:
+  maxUnavailable:
+
+internalIngress:
+  enabled: false
+  ingressClass: nginx

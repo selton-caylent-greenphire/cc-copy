@@ -1,0 +1,103 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "rideshare.svc.fullname" . }}
+  labels: {{ include "rideshare.svc.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels: {{ include "rideshare.svc.selectorLabels" . | nindent 6 }}
+  {{- if not .Values.rideshareService.autoscaling.enabled }}
+  replicas: {{ .Values.rideshareService.replicaCount }}
+  {{- end }}
+  progressDeadlineSeconds: {{ default 600 .Values.progressDeadlineSeconds  }}
+  revisionHistoryLimit: {{ default 10 .Values.revisionHistoryLimit  }}
+  {{- if .Values.rollingUpdateDeploymentStrategy.enabled }}
+  strategy: 
+    type: RollingUpdate
+    rollingUpdate: {{ include "rideshare.rollingUpdateDeploymentStrategy" . | nindent 6 }}
+  {{- end }}
+  template:
+    metadata:
+      labels: {{ include "rideshare.svc.selectorLabels" . | nindent 8 }}        
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      containers:
+      - name: {{ include "rideshare.svc.fullname" . }}
+        image: {{ .Values.rideshareService.image }}
+        imagePullPolicy: {{ default "IfNotPresent" .Values.imagePullPolicy }}
+        command: ["/bin/bash"]
+        args:
+        - -c
+        - pip install python-logstash git+https://github.com/Greenphire/jslog4kube.git && ridesharesvc
+        ports:
+        - containerPort: {{ default 8080 .Values.rideshareService.containerPort }}
+          name: {{ include "rideshare.svc.fullname" . }}
+          protocol: {{ default "TCP" .Values.rideshareService.containerPortProtocol }}
+        env: 
+{{- include (print .Template.BasePath "/_common_envs.yaml.tpl") . | nindent 8 }}
+        - name: ANTIVIRUS_ENABLED
+          value: {{ .Values.virusscan.enable | ternary "1" "0" | quote }}
+        - name: ANTIVIRUS_URL
+          value: http://{{ .Values.dependencies.virusscanning }}:3320/swagger.json        
+        {{- with .Values.readinessProbe }}
+        readinessProbe:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with .Values.livenessProbe }}
+        livenessProbe:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        resources:
+          {{- toYaml .Values.rideshareService.resources | nindent 10 }}          
+        terminationMessagePath: {{ default "/dev/termination-log" .Values.containersTerminationMessagePath}}
+        terminationMessagePolicy: {{ default "File" .Values.containersTerminationMessagePolicy}}
+        volumeMounts:
+        - mountPath: {{ default "/config" .Values.volumes.configMountPath }}
+          name: {{ default "config" .Values.volumes.configName }}
+        - mountPath: {{ default "/root/.ssh" .Values.volumes.ccsshMountPath }}
+          name: {{ default "cc-ssh" .Values.volumes.ccsshName }}
+      serviceAccountName: {{ include "rideshare.serviceAccountName" . }}
+      {{- with .Values.securityContext }}
+      securityContext:
+        {{- toYaml .Values.securityContext | nindent 8 }}
+      {{- end }}      
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.dnsPolicy }}
+      dnsPolicy: {{ .Values.dnsPolicy }}
+      {{- end }}
+      {{- if .Values.restartPolicy }}
+      restartPolicy: {{ .Values.restartPolicy }}
+      {{- end }}
+      {{- if .Values.schedulerName }}
+      schedulerName: {{ .Values.schedulerName }}
+      {{- end }}
+      {{- if .Values.terminationGracePeriodSeconds }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      {{- end }}
+      volumes:
+      - name: {{ default "cc-ssh" .Values.volumes.ccsshName }}
+        secret:
+          defaultMode: {{ default 384 .Values.volumes.ccsshDefaultMode }}
+          secretName: {{ .Values.dependencies.ccsshsecrets }}
+      - name: {{ default "config" .Values.volumes.configName }}
+        configMap:
+          defaultMode: {{ default 420 .Values.volumes.configDefaultMode }}
+          name: {{ include "rideshare.svc.fullname" . }}
+          items:
+          - key: config.json
+            path: config.json

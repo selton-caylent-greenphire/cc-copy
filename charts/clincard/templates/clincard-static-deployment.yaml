@@ -1,0 +1,48 @@
+{{- if eq .Values.clincardstatic.enable true }}
+{{- $deployment := .Values.clincardstatic }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels: {{ include "service.labels" . | nindent 4 }}
+    component: {{ template "service.static.fullname" . }}
+    tier: {{ default .Values.tier $deployment.tier }}
+  name: {{ template "service.static.fullname" . }}
+spec:
+  progressDeadlineSeconds: {{ default 600 $deployment.progressDeadlineSeconds}}
+  replicas: {{ default 1 $deployment.replicas }}
+  revisionHistoryLimit: {{ default 10 $deployment.revisionHistoryLimit }}
+  selector:
+    matchLabels: {{ include "service.selectorLabels" . | nindent 6 }}
+      component: {{ template "service.static.fullname" . }}
+      tier: {{ default .Values.tier $deployment.tier }}
+  strategy:
+    rollingUpdate:
+      maxSurge: {{ default "50%" $deployment.strategyMaxSurge }}
+      maxUnavailable: {{ default "20%" $deployment.strategyMaxUnavailable }}
+    type: {{ default "RollingUpdate" $deployment.strategyType }}
+  template:
+    metadata:
+      labels: {{ include "service.labels" . | nindent 8 }}
+        component: {{ template "service.static.fullname" . }}
+        tier: {{ default .Values.tier $deployment.tier }}        
+    spec:
+      containers:
+      - image: {{ .Values.images.static }}
+        imagePullPolicy: {{ default "IfNotPresent" $deployment.imagePullPolicy }}        
+        name: {{ default "clincard-static" $deployment.containerName }}
+        ports:
+        - containerPort: {{ default 80 $deployment.service.port }}
+          name: {{ default "clincard-static" $deployment.containerPortName }} 
+          protocol: {{ default "TCP" $deployment.service.protocol }}        
+        terminationMessagePath: {{ default "/dev/termination-log" $deployment.terminationMessagePath }}
+        terminationMessagePolicy: {{ default "File" $deployment.terminationMessagePolicy }}
+      dnsPolicy: {{ default "ClusterFirst" $deployment.dnsPolicy }}
+      restartPolicy: {{ default "Always" $deployment.restartPolicy }}
+      schedulerName: {{ default "default-scheduler" $deployment.schedulerName }}
+      {{- with $deployment.securityContext }}
+      securityContext:
+      {{- toYaml . | nindent 8 }}
+      {{- end }}  
+      terminationGracePeriodSeconds: {{ default 30 $deployment.terminationGracePeriodSeconds }}
+{{- end }}

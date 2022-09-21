@@ -1,0 +1,14 @@
+---
+apiVersion: helm.fluxcd.io/v1
+kind: HelmRelease
+metadata:
+  name: redis
+  namespace: ##namespace##
+  annotations:
+    fluxcd.io/automated: "true"
+spec:
+  releaseName: redis
+  chart:
+    git: git@github.com:/Greenphire/clincard-config
+    path: charts/redis
+    ref: master

@@ -1,0 +1,69 @@
+{{- if .Values.ingress }}
+{{- range $name, $value := .Values.ingress }}
+---
+apiVersion: configuration.konghq.com/v1
+kind: KongPlugin
+metadata:
+  name: ccadmin-api-cors-{{ $name }}
+config:
+  credentials: true
+  exposed_headers:
+  - Authorization
+  headers:
+  - DNT
+  - X-CustomHeader
+  - Keep-Alive
+  - User-Agent
+  - X-Requested-With
+  - If-Modified-Since
+  - Cache-Control
+  - Content-Type
+  - Authorization
+  methods:
+    - GET
+    - POST
+    - PUT
+    - PATCH
+    - HEAD
+  origins:
+  - '*'
+  preflight_continue: false
+plugin: cors
+---
+apiVersion: configuration.konghq.com/v1
+kind: KongPlugin
+metadata:
+  name: ccadmin-api-jwt-{{ $name }}
+config:
+  claims_to_verify:
+    - exp
+    - nbf
+plugin: jwt
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  annotations:
+    konghq.com/strip-path: {{ $value.strip_path  | quote}}
+    konghq.com/preserve-host: {{ $value.preserve_host | quote}}
+    konghq.com/plugins: ccadmin-api-cors-{{ $name  }}, ccadmin-api-jwt-{{ $name }}
+  name: ccadmin-api-{{ $name }}
+spec:
+  ingressClassName: kong
+  rules:
+  - host: {{ ternary (include "hosts_apiint" $) (include "hosts_api" $) $value.apiinternal }}
+    http:
+      paths:
+      - path: {{ $value.path }}
+        pathType: {{ $value.pathType }}
+        backend:
+          service:
+            name: {{ $value.service_name }}
+            port:
+              number: {{ $value.service_port }}
+  tls:
+  - secretName: {{ $.Values.dependencies.nginxcert }}
+    hosts:
+    - {{ ternary (include "hosts_apiint" $) (include "hosts_api" $) $value.apiinternal }}
+{{- end }}
+{{- end }}

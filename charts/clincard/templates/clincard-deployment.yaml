@@ -1,0 +1,157 @@
+{{- if eq .Values.clincardclincard.enable true }}
+{{- $deployment := .Values.clincardclincard }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels: {{ include "service.labels" . | nindent 4 }}
+    component: {{ template "service.fullname" . }}
+    tier: {{ default .Values.tier $deployment.tier }}
+  name: {{ template "service.fullname" . }}
+spec:
+  progressDeadlineSeconds: {{ default 600 $deployment.progressDeadlineSeconds}}
+  replicas: {{ default 1 $deployment.replicas }}
+  revisionHistoryLimit: {{ default 10 $deployment.revisionHistoryLimit }}
+  selector:
+    matchLabels: {{ include "service.selectorLabels" . | nindent 6 }}
+      component: {{ template "service.fullname" . }}
+      tier: {{ default .Values.tier $deployment.tier }}
+  strategy:
+    rollingUpdate:
+      maxSurge: {{ default "50%" $deployment.strategyMaxSurge }}
+      maxUnavailable: {{ default "20%" $deployment.strategyMaxUnavailable }}
+    type: {{ default "RollingUpdate" $deployment.strategyType }}
+  template:
+    metadata:
+      labels: {{ include "service.labels" . | nindent 8 }}
+        component: {{ template "service.fullname" . }}
+        tier: {{ default .Values.tier $deployment.tier }}
+    spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app
+                operator: In
+                values:
+                - clincard
+              - key: tier
+                operator: In
+                values:
+                - frontend
+            topologyKey: kubernetes.io/hostname
+      {{ if $deployment.initContainers }}
+      initContainers: {{ include (print .Template.BasePath "/_deployment_cc_initcontainers.yaml.tpl") . | nindent 6 }}
+      {{ end }}
+      containers:
+      - env:
+{{ include (print .Template.BasePath "/_common_db_env.yaml.tpl"  ) . |  indent 8 }}
+{{ include (print .Template.BasePath "/_common_svc_env.yaml.tpl" ) . |  indent 8 }}
+{{ include (print .Template.BasePath "/_common_rmq_env.yaml.tpl" ) . |  indent 8 }}
+{{ include (print .Template.BasePath "/_common_task_envs.yaml.tpl" ) . |  indent 8 }}
+{{ include (print .Template.BasePath "/_common_google_envs.yaml.tpl" ) . |  indent 8 }}
+{{- if eq .Release.Namespace "prod"}}
+{{ include (print .Template.BasePath "/_common_email_envs.yaml.tpl" ) . |  indent 8 }}
+{{- end }}
+{{- if .Values.global.jira.enabled }}
+{{ include (print .Template.BasePath "/_common_jira_envs.yaml.tpl" ) . |  indent 8 }}
+{{- end }}
+{{- if .Values.twilio.enabled }}
+{{ include (print .Template.BasePath "/_common_twilio_envs.yaml.tpl" ) . |  indent 8 }}
+{{- end }}
+{{- range $key, $value := $deployment.customEnv }}
+        - name: {{ $key }}
+          value: {{ $value | quote }}
+{{- end }}        
+        - name: ALLOWED_HOSTS
+          value: .{{ include "hosts_domain" . }},localhost,127.0.0.1,clincard
+        - name: CCADMIN_URL
+          value: http://{{ include "hosts_ccadmin" . }}
+        - name: STATIC_URL
+          value: https://{{ include "hosts_static" . }}/
+        - name: GRAVE_DIGGER
+          value: {{ .Values.global.envs.GRAVE_DIGGER }}
+        - name: MEDIA_URL
+          value: {{ .Values.global.envs.MEDIA_URL | quote }}
+        - name: PBDR_MAX_LEDGER_COUNT
+          value: {{ .Values.global.envs.PBDR_MAX_LEDGER_COUNT | quote }}
+        - name: LYFT_VERIFICATION_TOKEN
+          valueFrom:
+            secretKeyRef:
+              key: lyft_verification_token
+              name: {{ template "service.secret" . }}        
+        - name: PINGONE_API_KEY
+          valueFrom:
+            secretKeyRef:
+              key: pingone_api_key
+              name: {{ template "service.secret" . }}
+        - name: PINGONE_CREDENTIAL
+          valueFrom:
+            secretKeyRef:
+              key: pingone_credential
+              name: {{ template "service.secret" . }}
+        - name: PYTHONHASHSEED
+          value: "0"
+        image: {{ .Values.images.default }}
+        imagePullPolicy: {{ default "IfNotPresent" $deployment.imagePullPolicy }}        
+        name: {{ default "clincard" $deployment.containerName }}
+        ports:
+        - containerPort: {{ default 8888 $deployment.service.port }}
+          name: {{ default "clincard" $deployment.containerPortName }} 
+          protocol: {{ default "TCP" $deployment.service.protocol }}
+        readinessProbe:
+          failureThreshold: {{ default 3 $deployment.failureThreshold }}
+          httpGet:
+            httpHeaders:
+            - name: Host
+              value: {{ include "hosts_cc" . }}
+            path: /login/
+            port: {{ default 8888 $deployment.service.port }}
+            scheme: HTTP
+          initialDelaySeconds: {{ default 30 $deployment.initialDelaySeconds }}
+          periodSeconds: {{ default 10 $deployment.periodSeconds }} 
+          successThreshold: {{ default 1 $deployment.successThreshold }} 
+          timeoutSeconds: {{ default 5 $deployment.timeoutSeconds }} 
+        resources:
+          limits:
+            cpu: {{ default "2" $deployment.resourcesLimitsCpu }}
+            memory: {{ default "4Gi" $deployment.resourcesLimitsMemory }}
+          requests:
+            cpu: {{ default "200m" $deployment.resourcesRequestsCpu }}
+            memory: {{ default "512Mi" $deployment.resourcesRequestsMemory }}        
+        terminationMessagePath: {{ default "/dev/termination-log" $deployment.terminationMessagePath }}
+        terminationMessagePolicy: {{ default "File" $deployment.terminationMessagePolicy }}
+        volumeMounts:
+        - mountPath: {{ default "/clincard/data" $deployment.volumeDataMountPath }}
+          name: {{ default "data" $deployment.volumeDataName }}
+        - mountPath: {{ default "/clincard/media/clinclient/studies/receipts" $deployment.volumeMediaMountPath }}
+          name: {{ default "media" $deployment.volumeMediaName }}
+        - mountPath: {{ default "/clincard/media/uploads" $deployment.volumeMediaUploadsMountPath }}
+          name: {{ default "media-uploads" $deployment.volumeMediaUploadsName }}        
+      dnsPolicy: {{ default "ClusterFirst" $deployment.dnsPolicy }}
+      {{- with $deployment.hostAliases }}
+      hostAliases:
+      {{- range . }}
+      - hostnames: {{ .names | toYaml | nindent 8 }}
+        ip: {{ .ip }}
+      {{- end }}
+      {{- end }}
+      restartPolicy: {{ default "Always" $deployment.restartPolicy }}
+      schedulerName: {{ default "default-scheduler" $deployment.schedulerName }}
+      {{- with $deployment.securityContext }}
+      securityContext:
+      {{- toYaml . | nindent 8 }}
+      {{- end }}  
+      terminationGracePeriodSeconds: {{ default 30 $deployment.terminationGracePeriodSeconds }}
+      volumes:
+      - name: {{ default "data" $deployment.volumeDataName }}
+        persistentVolumeClaim:
+          claimName: {{ printf "clincard-efs-%s-data" $.Release.Namespace }}
+      - name: {{ default "media" $deployment.volumeMediaName }}
+        persistentVolumeClaim:
+          claimName: {{ printf "clincard-efs-%s-media" $.Release.Namespace }}
+      - name: {{ default "media-uploads" $deployment.volumeMediaUploadsName }}
+        persistentVolumeClaim:
+          claimName: {{ printf "clincard-%s-media-uploads" $.Release.Namespace }}
+{{- end }}

@@ -1,0 +1,82 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "paymentapprovalsconsumer.name" . }}
+  labels: {{ include "paymentapprovalsconsumer.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels: {{ include "paymentapprovalsconsumer.selectorLabels" . | nindent 6 }}
+  replicas: {{ .Values.consumer.replicaCount }}
+  progressDeadlineSeconds: {{ default 600 .Values.consumer.progressDeadlineSeconds  }}
+  revisionHistoryLimit: {{ default 10 .Values.consumer.revisionHistoryLimit  }}
+  {{- if .Values.rollingUpdateDeploymentStrategy.enabled }}
+  strategy: 
+    type: RollingUpdate
+    rollingUpdate: {{ include "paymentapprovals.rollingUpdateDeploymentStrategy" . | nindent 6 }}
+  {{- end }}
+  template:
+    metadata:
+      labels: {{ include "paymentapprovalsconsumer.selectorLabels" . | nindent 8 }}        
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      containers:
+      - name: "consumer"
+        image: {{ .Values.consumer.image }}
+        imagePullPolicy: {{ default "IfNotPresent" .Values.consumer.imagePullPolicy }}
+        command: ["/bin/bash"]  
+        args:
+        - -c
+        - pip install python-logstash && paymentapproval-consumer  
+        env:
+{{ include (print .Template.BasePath "/_commons_env.yaml.tpl" ) . |  indent 8 }}
+        resources:
+          limits:
+            cpu: {{ default "300m" .Values.consumer.resourcesLimitsCpu }}
+            memory: {{ default "130Mi" .Values.consumer.resourcesLimitsMemory }}
+          requests:
+            cpu: {{ default "100m" .Values.consumer.resourcesRequestsCpu }}
+            memory: {{ default "50Mi" .Values.consumer.resourcesRequestsMemory }}
+        volumeMounts:
+        - mountPath: {{ default "/config" .Values.consumer.containersVolumeMountsMountPath}}
+          name: {{ default "config" .Values.consumer.containersVolumeMountsName}}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "paymentapprovals.serviceAccountName" . }}
+      {{- with .Values.securityContext }}
+      securityContext:
+        {{- toYaml .Values.securityContext | nindent 8 }}
+      {{- end }}      
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.dnsPolicy }}
+      dnsPolicy: {{ .Values.dnsPolicy }}
+      {{- end }}
+      {{- if .Values.restartPolicy }}
+      restartPolicy: {{ .Values.restartPolicy }}
+      {{- end }}
+      {{- if .Values.schedulerName }}
+      schedulerName: {{ .Values.schedulerName }}
+      {{- end }}
+      {{- if .Values.terminationGracePeriodSeconds }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      {{- end }}
+      {{- with .Values.volumes }}
+      volumes:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

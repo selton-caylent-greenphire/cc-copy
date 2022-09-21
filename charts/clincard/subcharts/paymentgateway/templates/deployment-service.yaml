@@ -1,0 +1,104 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "paymentgateway.fullname" . }}
+  labels: {{ include "paymentgateway.labels" . | nindent 4 }}
+    tier: {{ .Values.service.tier }}
+spec:
+  selector:
+    matchLabels: {{ include "paymentgateway.selectorLabels" . | nindent 6 }}
+      tier: {{ .Values.service.tier }}
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.service.replicaCount }}
+  {{- end }}
+  progressDeadlineSeconds: {{ default 600 .Values.service.progressDeadlineSeconds  }}
+  revisionHistoryLimit: {{ default 10 .Values.service.revisionHistoryLimit  }}
+  {{- if .Values.rollingUpdateDeploymentStrategy.enabled }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: {{ .Values.service.rollingUpdate.maxSurge }}
+      maxUnavailable: {{ .Values.service.rollingUpdate.maxUnavailable }}
+  {{- end }}
+  template:
+    metadata:
+      labels: {{ include "paymentgateway.selectorLabels" . | nindent 8 }}
+        tier: {{ .Values.service.tier }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      containers:
+      - name: {{ include "paymentgateway.fullname" . }}
+        image: {{ .Values.service.image }}
+        imagePullPolicy: {{ default "IfNotPresent" .Values.service.imagePullPolicy }}
+        command:
+          - /bin/bash
+        args:
+        - -c
+        - pip install python-logstash git+https://github.com/Greenphire/jslog4kube.git && payment-gateway-service
+        ports:
+        - containerPort: {{ default 8080 .Values.service.containerPort }}
+          name: {{ include "paymentgateway.fullname" . }}
+          protocol: {{ default "TCP" .Values.service.containerPortProtocol }}
+        env:
+{{ include (print .Template.BasePath "/_commons_env.yaml.tpl" ) . |  indent 8 }}
+        {{- with .Values.service.readinessProbe }}
+        readinessProbe:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with .Values.service.livenessProbe }}
+        livenessProbe:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        resources:
+          limits:
+            cpu: {{ default "1" .Values.service.resources.limits.cpu }}
+            memory: {{ default "750Mi" .Values.service.resources.limits.memory }}
+          requests:
+            cpu: {{ default "250m" .Values.service.resources.requests.cpu }}
+            memory: {{ default "250Mi" .Values.service.resources.requests.memory }}
+        terminationMessagePath: {{ default "/dev/termination-log" .Values.service.containersTerminationMessagePath}}
+        terminationMessagePolicy: {{ default "File" .Values.service.containersTerminationMessagePolicy}}
+        volumeMounts:
+        - mountPath: {{ default "/config" .Values.service.containersVolumeMountsMountPath}}
+          name: {{ default "config" .Values.service.containersVolumeMountsName}}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "paymentgateway.serviceAccountName" . }}
+      {{- with .Values.securityContext }}
+      securityContext:
+        {{- toYaml .Values.securityContext | nindent 8 }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.dnsPolicy }}
+      dnsPolicy: {{ .Values.dnsPolicy }}
+      {{- end }}
+      {{- if .Values.restartPolicy }}
+      restartPolicy: {{ .Values.restartPolicy }}
+      {{- end }}
+      {{- if .Values.schedulerName }}
+      schedulerName: {{ .Values.schedulerName }}
+      {{- end }}
+      {{- if .Values.terminationGracePeriodSeconds }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      {{- end }}
+      {{- with .Values.volumes }}
+      volumes:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

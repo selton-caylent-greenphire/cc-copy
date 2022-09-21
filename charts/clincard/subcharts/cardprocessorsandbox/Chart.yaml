@@ -1,0 +1,13 @@
+apiVersion: v2
+name: cardprocessorsandbox
+description: A Helm chart deploying ClinCard card processor sandbox service
+type: application
+version: 0.2.3
+appVersion: "1.0.0"
+maintainers:
+- name: Helene McElroy
+  email: helene.mcelroy@greenphire.com
+- name: Jeisson Osorio
+  email: jeisson.osorio@greenphire.com
+keywords:
+  - cardprocessorsandbox

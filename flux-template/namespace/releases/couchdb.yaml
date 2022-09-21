@@ -1,0 +1,79 @@
+---
+apiVersion: helm.fluxcd.io/v1
+kind: HelmRelease
+metadata:
+  name: couchdb-ha
+  namespace: ##namespace##
+  annotations:
+    fluxcd.io/automated: "true"
+    filter.fluxcd.io/chart-image: 2.2.0
+spec:
+  releaseName: couchdb-ha
+  chart:
+    git: git@github.com:/Greenphire/clincard-config
+    path: charts/couchdb
+    ref: master
+  valuesFrom:
+    - secretKeyRef:
+        name: couchdb-secrets
+        key: SecureString
+  values:
+    image:
+      repository: couchdb
+      tag: 2.2.0
+    helperImage:
+      repository: kocolosk/couchdb-statefulset-assembler
+      tag: 1.1.0
+      pullPolicy: IfNotPresent
+    ingress:
+      enabled: true
+      hosts: 
+      - ##instance##-couchdb.clincard.com
+      tls:
+      - secretName: nginx-cert
+        hosts:
+        - ##instance##-couchdb.clincard.com
+    clusterSize: 2
+    createAdminSecret: true
+    adminUsername: admin
+    persistentVolume:
+      enabled: true
+      accessModes:
+        - ReadWriteOnce
+      size: 50Gi
+      storageClass: "io1-encrypted-medium"
+    affinity:
+      nodeAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+          - preference:
+              matchExpressions:
+                - key: nodetype
+                  operator: In
+                  values:
+                    - compute
+            weight: 1
+      podAntiAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+                - key: "app"
+                  operator: In
+                  values:
+                  - couchdb
+                - key: "release"
+                  operator: In
+                  values:
+                  - couchdb-ha
+            topologyKey: "kubernetes.io/hostname"
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 4
+        memory: 8Gi
+    couchdbConfig:
+      query_server_config:
+        os_process_limit: 1000
+      couchdb:
+        max_dbs_open: 5000

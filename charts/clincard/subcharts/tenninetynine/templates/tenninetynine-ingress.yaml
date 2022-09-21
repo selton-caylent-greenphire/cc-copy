@@ -1,0 +1,32 @@
+{{- $host := get (include "hosts" . | fromJson) "apiinternal" -}}
+{{- $serviceName := include "tenninetynine.fullname" . -}}
+{{- $servicePort := .Values.ingress.port -}}
+{{- $path := .Values.ingress.path -}}
+{{- if eq .Values.ingress.enabled true -}}
+apiVersion: networking.k8s.io/v1beta1
+kind: Ingress
+metadata:
+  name: {{ template "tenninetynine.fullname" . }}
+  labels:
+    app: {{ template "tenninetynine.name" . }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    release: {{ .Release.Name }}
+    heritage: {{ .Release.Service }}
+  annotations:
+    {{- range $key, $value := .Values.ingress.annotations }}
+      {{ $key }}: {{ $value | quote }}
+    {{- end }}
+spec:
+  tls:
+    - secretName: nginx-cert
+      hosts:
+      - {{ $host }}
+  rules:
+    - host: {{ $host }}
+      http:
+        paths:
+          - path: {{ $path }}
+            backend:
+              serviceName: {{ $serviceName }}
+              servicePort: {{ $servicePort }}
+{{- end -}}

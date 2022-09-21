@@ -1,0 +1,107 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "ccadmin.fullname" . }}
+  labels: {{ include "ccadmin.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels: {{ include "ccadmin.selectorLabels" . | nindent 6 }}
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  progressDeadlineSeconds: {{ default 600 .Values.progressDeadlineSeconds }}
+  revisionHistoryLimit: {{ default 10 .Values.revisionHistoryLimit }}
+  {{- if .Values.rollingUpdateDeploymentStrategy.enabled }}
+  strategy: 
+    type: {{ default "RollingUpdate" .Values.deploymentStrategyType }}
+    rollingUpdate: {{ include "ccadmin.rollingUpdateDeploymentStrategy" . | nindent 6 }}
+  {{- end }}
+  template:
+    metadata:
+      labels: {{ include "ccadmin.selectorLabels" . | nindent 8 }}        
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- if .Values.initContainersSrc }}
+      initContainers:
+{{ include (print .Template.BasePath .Values.initContainersSrc ) . |  indent 8 }}
+      {{- end }}
+      containers:
+      - name: {{ include "ccadmin.fullname" . }}
+        image: {{ .Values.image }}
+        imagePullPolicy: {{ default "IfNotPresent" .Values.imagePullPolicy }}
+        ports:
+        - containerPort: {{ default 80 .Values.containerPort }}
+          name: {{ include "ccadmin.fullname" . }}
+          protocol: {{ default "TCP" .Values.containerPortProtocol }}
+        env:
+        - name: AUTH_URL
+          value: {{ printf "https://%s" (include "hosts_cc" .) }}
+        - name: API_URL
+          value: {{ printf "https://%s" (include "hosts_api" .) }}
+        {{- with .Values.readinessProbe }}
+        readinessProbe:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with .Values.livenessProbe }}
+        livenessProbe:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        resources:
+          limits:
+            cpu: {{ default "256m" .Values.resourcesLimitsCpu }}
+            memory: {{ default "256Mi" .Values.resourcesLimitsMemory }}
+          requests:
+            cpu: {{ default "15m" .Values.resourcesRequestsCpu }}
+            memory: {{ default "20Mi" .Values.resourcesRequestsMemory }}
+        terminationMessagePath: {{ default "/dev/termination-log" .Values.containersTerminationMessagePath}}
+        terminationMessagePolicy: {{ default "File" .Values.containersTerminationMessagePolicy}}
+        volumeMounts:
+        - mountPath: {{ default "/etc/nginx/conf.d" .Values.volumes.configMountPath }}
+          name: {{ default "ccadmin-config" .Values.volumes.configName }}
+        - mountPath: {{ default "/usr/share/nginx/html/assets/env-config" .Values.volumes.envVarsMountPath }}
+          name: {{ default "ccadmin-env-vars" .Values.volumes.envVarsName }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "ccadmin.serviceAccountName" . }}
+      {{- with .Values.securityContext }}
+      securityContext:
+        {{- toYaml .Values.securityContext | nindent 8 }}
+      {{- end }} 
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.dnsPolicy }}
+      dnsPolicy: {{ .Values.dnsPolicy }}
+      {{- end }}
+      {{- if .Values.restartPolicy }}
+      restartPolicy: {{ .Values.restartPolicy }}
+      {{- end }}
+      {{- if .Values.schedulerName }}
+      schedulerName: {{ .Values.schedulerName }}
+      {{- end }}
+      {{- if .Values.terminationGracePeriodSeconds }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      {{- end }}
+      volumes:
+      - name: {{ default "config" .Values.volumes.configName }}
+        configMap:
+          defaultMode: {{ default 420 .Values.volumes.configDefaultMode }}
+          name: {{ include "ccadmin.fullname" . }}
+      - name: {{ default "envvars" .Values.volumes.envVarsName }}
+        configMap:
+          name: {{ include "ccadmin.envvars" . }}  

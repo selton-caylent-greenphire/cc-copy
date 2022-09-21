@@ -1,0 +1,113 @@
+---
+apiVersion: v1
+data:
+  # copied key from parameter store - /clincard/common/config-gitssh
+  id_rsa: 
+kind: Secret
+metadata:
+  annotations:
+  name: cc-ssh-config
+  namespace: default
+type: Opaque
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: image-monitoring
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: get-images
+rules:
+  - apiGroups: ["apps", "batch", "extensions"]
+    resources:
+      - deployments
+      - statefulsets
+      - daemonsets
+      - jobs
+      - cronjobs
+    verbs:
+      - get
+      - list
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: image-monitoring
+subjects:
+  - kind: ServiceAccount
+    name: image-monitoring
+roleRef:
+  kind: Role
+  name: get-images
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: monitoring
+  name: image-monitoring
+spec:
+  selector:
+    matchLabels:
+      app: monitoring
+      teir: monitoring
+  template:
+    metadata:
+      labels:
+        app: monitoring
+        teir: monitoring
+    spec:
+      restartPolicy: Always
+      serviceAccountName: image-monitoring
+      containers:
+      - command: ["/bin/bash","-c"]
+        args:
+          - >-
+            apt-get -yq update && 
+            DEBIAN_FRONTEND=noninteractive apt-get -yq install git curl &&
+            curl -fsSLo /usr/share/keyrings/kubernetes-archive-keyring.gpg https://packages.cloud.google.com/apt/doc/apt-key.gpg &&
+            echo "deb [signed-by=/usr/share/keyrings/kubernetes-archive-keyring.gpg] https://apt.kubernetes.io/ kubernetes-xenial main" > /etc/apt/sources.list.d/kubernetes.list &&
+            apt-get update &&
+            apt-get install -y kubectl &&
+            mkdir /clincard-config &&
+            mkdir /root/.ssh &&
+            cp /secrets/id_rsa /root/.ssh/id_rsa &&
+            chmod 600 -R /root/.ssh/id_rsa &&
+            git clone git@github.com:Greenphire/clincard-config /clincard-config &&
+            chmod 755 /clincard-config/scripts/* &&
+            /clincard-config/scripts/image-check.sh
+        env:
+        - name: GIT_SSH_COMMAND
+          value: "ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no"
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: FROM_EMAIL
+          value: "itsgalerts@greenphire.com"
+        - name: EMAIL_TO
+          value: "gphelp@greenphire.atlassian.net"
+        - name: FROM_NAME
+          value: "Image Monitor Alert"
+        - name: SUBJECT
+          value: "Images Changed on k8sprod"
+        - name: SENDGRID_API_KEY
+          valueFrom:
+            secretKeyRef:
+              key: sendgrid-api-key
+              name: sendgrid-api-key
+        - name: AWS_REGION
+          value: "us-east-1"
+        name: ubuntu
+        image: ubuntu:20.04
+        volumeMounts:
+        - mountPath: /secrets
+          name: secrets
+          readOnly: true
+      volumes:
+      - name: secrets
+        secret:
+          secretName: cc-ssh-config

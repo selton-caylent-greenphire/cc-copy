@@ -1,0 +1,83 @@
+nameOverride: "servicename"
+fullnameOverride: "servicename"
+secretpath: lower
+tier: service
+
+image: 160116585046.dkr.ecr.us-east-1.amazonaws.com/clincard/auth-svc:2.6.1
+secretsTemplateSrc: "/_externalsecrets.yaml.tpl"
+initContainersSrc: "/_deployment_initcontainers.yaml.tpl"
+
+postgres:
+  image: bitnami/postgresql:11.6.0-debian-9-r0
+
+db:
+  service: microservicedb-postgres
+  database: servicename
+  username: servicename
+  db_admin: clincard
+
+volumes:
+  - name: config 
+    configMap:
+      defaultMode: 420
+      items:
+      - key: config.json
+        path: config.json
+      name: servicename
+
+readinessProbe:
+  failureThreshold: 3
+  httpGet:
+    path: /swagger.json
+    port: 8080
+    scheme: HTTP
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  successThreshold: 1
+  timeoutSeconds: 5
+
+livenessProbe:
+  failureThreshold: 3
+  httpGet:
+    path: /swagger.json
+    port: 8080
+    scheme: HTTP
+  initialDelaySeconds: 30
+  periodSeconds: 30
+  successThreshold: 1
+  timeoutSeconds: 5
+
+configMapJson:
+  - dataKey: config.json
+    dataKeyTemplateSrc: "/_configmap.json.tpl"
+    loggerServiceName: servicename    
+
+service:
+  enabled: true
+  type: ClusterIP
+  port: 8080
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: 10800
+
+replicaCount: 2
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 80
+  targetMemoryUtilizationPercentage: 80
+
+serviceAccount:
+  create: false 
+  name: ""         
+
+dnsPolicy: ClusterFirst
+restartPolicy: Always
+schedulerName: default-scheduler    
+terminationGracePeriodSeconds: 30
+
+rollingUpdateDeploymentStrategy:
+  enabled: true
+  maxSurge:
+  maxUnavailable:

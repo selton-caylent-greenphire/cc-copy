@@ -1,0 +1,23 @@
+{{- if eq .Values.clincardclincard.enable true }}
+{{- if and .Values.clincardclincard.service .Values.clincardclincard.service.enabled }}
+{{- $deployment := .Values.clincardclincard }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels: {{ include "service.labels" . | nindent 4 }}
+    component: {{ template "service.fullname" . }}
+    tier: {{ default .Values.tier $deployment.tier }}
+  name: {{ template "service.fullname" . }}
+spec:
+  ports:
+  - port: {{ default 8888 $deployment.service.port }}
+    protocol: {{ default "TCP" $deployment.service.protocol }}
+    targetPort: {{ default 8888 $deployment.service.targetPort }}
+  selector: {{ include "service.selectorLabels" . | nindent 4 }}
+    component: {{ template "service.fullname" . }}
+    tier: {{ default .Values.tier $deployment.tier }}
+  sessionAffinity: {{ default "None" $deployment.service.sessionAffinity }}
+  type: {{ default "ClusterIP" $deployment.service.type }}
+{{- end }}
+{{- end }}

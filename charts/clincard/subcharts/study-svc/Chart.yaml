@@ -1,0 +1,14 @@
+apiVersion: v2
+name: study-svc
+description: Helm chart with the study-svc definition
+type: application
+version: 0.4.6
+appVersion: "1.0"
+maintainers:
+- name: Helene McElroy
+  email: helene.mcelroy@greenphire.com
+- name: Jeisson Osorio
+  email: jeisson.osorio@greenphire.com
+keywords:  
+  - study-svc
+  - external_apis

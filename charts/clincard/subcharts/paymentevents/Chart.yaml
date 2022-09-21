@@ -1,0 +1,15 @@
+apiVersion: v2
+name: paymentevents
+description: Helm chart with the paymentevents definition
+type: application
+version: 0.3.4
+appVersion: "1.0"
+maintainers:
+- name: Helene McElroy
+  email: helene.mcelroy@greenphire.com
+- name: Jeisson Osorio
+  email: jeisson.osorio@greenphire.com
+keywords:  
+  - payment
+  - payment-events
+  - rabbit-mq

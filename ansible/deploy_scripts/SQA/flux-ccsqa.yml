@@ -1,0 +1,105 @@
+- name: Flux Minikube Deployment
+  connection: local
+  hosts: localhost
+  vars:
+    deployments:
+      - name: cctest
+        repo: /Greenphire/clincard-config
+        namespace: cctest
+        branch: autotest
+        directory: cctest
+        cluster: "{{ context }}"
+        cluster_name: "{{ context.split('/')[1] if (context != 'minikube') else context }}"
+      - name: staging
+        repo: /Greenphire/clincard-config
+        namespace: staging
+        branch: staging
+        directory: staging
+        cluster: "{{ context }}"
+        cluster_name: "{{ context.split('/')[1] if (context != 'minikube') else context }}"
+      - name: teamd
+        repo: /Greenphire/clincard-config
+        namespace: teamd
+        branch: teamd
+        directory: team-d
+        cluster: "{{ context }}"
+        cluster_name: "{{ context.split('/')[1] if (context != 'minikube') else context }}"
+      - name: csm
+        repo: /Greenphire/clincard-config
+        namespace: csm
+        branch: csm
+        directory: csm
+        cluster: "{{ context }}"
+        cluster_name: "{{ context.split('/')[1] if (context != 'minikube') else context }}"
+  tasks:
+    - name: create namespaces
+      community.kubernetes.k8s:
+        name: "{{ item.namespace }}"
+        context: "{{ context }}"
+        api_version: v1
+        kind: Namespace
+        state: present
+      loop: "{{ deployments }}"
+
+    - name: deploy flux key
+      community.kubernetes.k8s:
+        state: present
+        context: "{{ item.cluster }}"
+        kind: Secret
+        namespace: "{{ item.namespace }}"
+        api_version: v1
+        wait: yes
+        apply: yes
+        name: flux-git-deploy
+        resource_definition:
+          data:
+            identity: "{{ lookup('aws_ssm', '/itsg/flux-identity', region='us-east-1') | b64encode }}"
+          type: Opaque
+      loop: "{{ deployments }}"
+
+    - name: deploy flux
+      community.kubernetes.helm:
+        context: "{{ item.cluster }}"
+        release_state: present
+        name: "{{ item.name }}-flux"
+        chart_ref: flux
+        chart_repo_url: https://charts.fluxcd.io
+        create_namespace: true
+        namespace: "{{ item.namespace }}"
+        values:
+          git:
+            branch: "{{ item.branch }}"
+            secretName: flux-git-deploy
+            url: "git@github.com:{{ item.repo }}"
+            path: "{{ item.cluster_name }}/{{ item.directory }}/releases,{{ item.cluster_name }}/{{ item.directory }}/secrets"
+            readonly: "true"
+          clusterRole:
+            create: false
+      loop: "{{ deployments }}"
+
+    - name: download crds.yaml
+      get_url:
+        url: https://raw.githubusercontent.com/fluxcd/helm-operator/master/deploy/crds.yaml
+        dest: /tmp/crds.yaml
+
+    - name: deploy flux crd
+      community.kubernetes.k8s:
+        src: /tmp/crds.yaml
+        wait: yes
+
+    - name: deploy flux helm operator
+      community.kubernetes.helm:
+        context: "{{ item.cluster }}"
+        release_state: present
+        name: "{{ item.name }}-helm"
+        chart_ref: helm-operator
+        chart_repo_url: https://charts.fluxcd.io
+        create_namespace: yes
+        namespace: "{{ item.namespace }}"
+        values:
+          git:
+            ssh:
+              secretName: flux-git-deploy
+          helm:
+            versions: "v3"
+      loop: "{{ deployments }}"

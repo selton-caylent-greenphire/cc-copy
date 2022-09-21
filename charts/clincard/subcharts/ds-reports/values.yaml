@@ -1,0 +1,90 @@
+name: ds-reports
+nameOverride: ds-reports
+fullnameOverride: ds-reports
+secretpath: lower
+image: 160116585046.dkr.ecr.us-east-1.amazonaws.com/clincard/clincarddsreports:2.2.1
+
+max_retries: 5 
+retry_countdown: 60
+studypaymentdetail_portal_limit: "1000"
+studypaymentdetail_email_limit: "1000000"
+ds_datawarehouse_api_url: https://gateway-dsdev01.corp.greenphire.net/ccdw
+
+service:
+  tier: api
+  replicas: 2
+  revisionHistoryLimit: 10
+  progressDeadlineSeconds: 600
+  rollingUpdate:
+    maxSurge: 10%
+    maxUnavailable: 10%
+  resources:
+    limits:
+      cpu: 250m
+      memory: 2Gi
+    requests:
+      cpu: 50m
+      memory: 256Mi
+  readinessProbe:
+    failureThreshold: 3
+    httpGet:
+      path: /swagger.json
+      port: 8080
+      scheme: HTTP
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    successThreshold: 1
+    timeoutSeconds: 5
+  hostAliases:
+    - names: [gateway-dsdev01.corp.greenphire.net]
+      ip: 10.75.82.212
+
+dscelery:
+  tier: backend
+  replicas: 2
+  revisionHistoryLimit: 10
+  progressDeadlineSeconds: 600
+  rollingUpdate:
+    maxSurge: 10%
+    maxUnavailable: 10%
+  resources:
+    limits:
+      cpu: 512m
+      memory: 1Gi
+    requests:
+      cpu: 10m
+      memory: 64Mi
+  hostAliases:
+    - names: [gateway-dsdev01.corp.greenphire.net]
+      ip: 10.75.82.212
+
+dependencies:
+  # -- Secrets dependency [clincard](https://github.com/Greenphire/clincard-config/tree/uat/charts/clincard)
+  clincardsecrets: clincard-secret
+
+volumes:
+- configMap:
+    defaultMode: 420
+    items:
+    - key: config.json
+      path: config.json
+    name: ds-reports
+  name: config
+
+serviceAccount:
+  create: false
+  name: ""
+
+configMapJson:
+  - dataKey: config.json
+    dataKeyTemplateSrc: "/_configmap.json.tpl"
+    loggerServiceName: clincarddsreports
+    loggerServiceLevel: DEBUG
+    loggerRootLevel: DEBUG
+
+# The below values can be overridden by parent chart global values.
+# See clincard chart values.yaml file.
+
+celery:
+  username: celery
+  service: rabbit-rabbitmq-ha

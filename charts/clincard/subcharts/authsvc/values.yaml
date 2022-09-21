@@ -1,0 +1,97 @@
+nameOverride: "authsvc"
+fullnameOverride: "authsvc"
+secretpath: lower
+tier: api
+
+image: 160116585046.dkr.ecr.us-east-1.amazonaws.com/clincard/auth-svc:2.6.3
+
+dependencies:
+  # -- Service dependency [messageservice](https://github.com/Greenphire/clincard-config/tree/uat/charts/clincard/subcharts/message-service)
+  messageservice: message-service
+  postgresadmin: postgres-admin
+  # -- Secrets dependency [clincard](https://github.com/Greenphire/clincard-config/tree/uat/charts/clincard)
+  clincardsecrets: clincard-secret
+
+# The below values can be overridden by parent chart global values. 
+# See clincard chart values.yaml file.
+# Start - chart global values
+postgres:
+  image: bitnami/postgresql:11.6.0-debian-9-r0
+
+db:
+  service: microservicedb-postgres
+  database: authsvc
+  username: authsvc
+  db_admin: clincard
+# end - chart global values
+
+volumes:
+  - name: config 
+    configMap:
+      defaultMode: 420
+      items:
+      - key: config.json
+        path: config.json
+      name: authsvc
+
+readinessProbe:
+  failureThreshold: 3
+  httpGet:
+    path: /swagger.json
+    port: 8080
+    scheme: HTTP
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  successThreshold: 1
+  timeoutSeconds: 5
+
+livenessProbe:
+  failureThreshold: 3
+  httpGet:
+    path: /swagger.json
+    port: 8080
+    scheme: HTTP
+  initialDelaySeconds: 30
+  periodSeconds: 30
+  successThreshold: 1
+  timeoutSeconds: 5
+
+configMapJson:
+  - dataKey: config.json
+    dataKeyTemplateSrc: "/_configmap.json.tpl"
+    loggerServiceName: authsvc    
+
+service:
+  enabled: true
+  type: ClusterIP
+  port: 8080
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: 10800
+
+replicaCount: 2
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 5
+  cpuTargetValue: 80
+  memoryTargetValue: 80
+
+serviceAccount:
+  create: false 
+  name: ""         
+
+dnsPolicy: ClusterFirst
+restartPolicy: Always
+schedulerName: default-scheduler    
+terminationGracePeriodSeconds: 30
+
+rollingUpdateDeploymentStrategy:
+  enabled: true
+  maxSurge:
+  maxUnavailable:
+
+# The below values can be overridden to test on LLEs
+authsvc:
+  jwtExpire: "7776000"
+  jwtRedisTTL: "604800"

@@ -1,0 +1,86 @@
+name: programbalancedetail
+nameOverride: programbalancedetail
+fullnameOverride: programbalancedetail
+tier: reports
+
+resources:
+  service:
+    replicas: 2
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 50m
+      memory: 128Mi
+  consumer:
+    replicas: 2
+    limits:
+      cpu: 500m
+      memory: 256Mi
+    requests:
+      cpu: 10m
+      memory: 64Mi
+    autoscaling:
+      enabled: false
+      minReplicas: 2
+      maxReplicas: 5
+      rabbitmqMetricName: pbdr_payments_v2-queue-length
+      rabbitmqQueueName: pbdr_payments_v2
+      rabbitmqTargetValue: 15
+      rabbitmqUrlEnvVar: RABBITMQ_URI
+  mailer:
+    limits:
+      cpu: 500m
+      memory: 2Gi
+    requests:
+      cpu: 50m
+      memory: 256Mi
+
+dependencies:
+  ridesharesvc: rideshare
+
+images:
+  consumer: 160116585046.dkr.ecr.us-east-1.amazonaws.com/clincard/programbalancedetail-consumer:1.2.8
+  service: 160116585046.dkr.ecr.us-east-1.amazonaws.com/clincard/programbalancedetail:1.2.8
+  mailer: 160116585046.dkr.ecr.us-east-1.amazonaws.com/clincard/programbalancedetail-task:1.2.8
+
+
+# The below values can be overridden by parent chart global values. 
+# See clincard chart values.yaml file.
+postgres:
+  image: bitnami/postgresql:11.6.0-debian-9-r0
+
+couchdb:
+  user: admin
+  service: couchdb-ha-svc-couchdb
+  db_pis: paymentindex
+  db_pbdr: pbdr_v2
+  initdb: false
+  init_bucket: cc-couchinit-lower
+
+portaldb:
+  service: portaldb-postgres
+  database: ccportaldatabase
+  username: pbd
+  db_admin: clincard
+
+rabbit:
+  username: payments
+  service: rabbit-rabbitmq-ha
+
+mailer:
+  enabled: false
+  email_host: "10.75.23.123"
+  email_user: " "
+  email_port: 25
+  use_tls: 0
+  no_login: "1"
+  upload_host: "ccdevmedia01.corp.greenphire.net"
+  upload_path: "/home/media/greenphire_media/reports/"
+  upload_user: "media"
+  url_base: "https://ccdevmedia01.corp.greenphire.net:8443/reports"
+  xls_tmp_dir: "/tmp"
+  hostAliases:
+    - ip: "10.75.12.73"
+      hostnames:
+        - "ccdevmedia01.corp.greenphire.net"

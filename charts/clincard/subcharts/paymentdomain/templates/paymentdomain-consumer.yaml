@@ -1,0 +1,108 @@
+{{- $usr := get (include "db" . | fromJson) "username" -}}
+{{- $svc := get (include "db" . | fromJson) "service" -}}
+{{- $db := get (include "db" . | fromJson) "database" -}}
+{{- $rmq_usr := get (include "rabbit" . | fromJson) "username" }}
+{{- $rmq_svc := get (include "rabbit" . | fromJson) "service" }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels: {{ include "paymentdomain.labels" . | nindent 4 }}
+    app: {{ template "paymentdomain.name" . }}
+    component: {{ template "paymentdomain.consumer.fullname" . }}
+    release: {{ .Release.Name }}
+    tier: {{ .Values.tier }}
+  name: {{ template "paymentdomain.consumer.fullname" . }}
+spec:
+  progressDeadlineSeconds: 600
+  {{- if not .Values.resources.consumer.autoscaling.enabled }}
+  replicas: {{ .Values.resources.consumer.replicas }}
+  {{- end }}
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app: {{ template "paymentdomain.name" . }}
+      component: {{ template "paymentdomain.consumer.fullname" . }}
+      release: {{ .Release.Name }}
+      tier: {{ .Values.tier }}
+  strategy:
+    rollingUpdate:
+      maxSurge: 5 # TODO - make this a percentage instead of a hard number
+      maxUnavailable: 20 # TODO - make this a percentage instead of a hard number
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: {{ template "paymentdomain.name" . }}
+        component: {{ template "paymentdomain.consumer.fullname" . }}
+        release: {{ .Release.Name }}
+        tier: {{ .Values.tier }}
+    spec:
+      initContainers:
+      - name: wait-for-postgres
+        image: {{ include "pgimage" . }}
+        command: ['sh', '-c', 'until pg_isready -h {{ $svc }}.{{ .Release.Namespace }} -U {{ $usr }} ; do echo waiting for database; sleep 2; done;']
+      containers:
+      - args:
+        - -c
+        - pip install python-logstash && payment-domain-consumer
+        command:
+        - /bin/bash
+        env:
+        - name: CLINCARD_EXCHANGE
+          value: clincard_core
+        - name: CLINCARD_DLX
+          value: clincard-domain-dlx
+        - name: CLINCARD_QUEUE
+          value: clincard_domain
+        - name: CLINCARD_ROUTING_KEY
+          value: clincard_core.*
+        - name: CONFIG_FILE_PATH
+          value: /config/config.json
+        - name: DB_PASS
+          valueFrom:
+            secretKeyRef:
+              key: postgres-{{ $usr }}
+              name: {{ .Values.dependencies.clincardsecrets }}
+        - name: DB_URI
+          value: {{ printf "postgresql://%s:$(DB_PASS)@%s.%s/%s" $usr $svc .Release.Namespace $db }}
+        - name: RABBITMQ_EXCHANGE
+          value: payments
+        - name: RABBITMQ_QUEUE
+          value: domain
+        - name: RABBITMQ_ROUTING_KEY
+          value: payments.*
+        - name: RABBIT_PASS
+          valueFrom:
+            secretKeyRef:
+              key: payments
+              name: rabbit-secret
+        - name: RABBITMQ_URI
+          value: {{ printf "amqp://%s:$(RABBIT_PASS)@%s.%s:5672/" $rmq_usr $rmq_svc .Release.Namespace }}
+        image: {{ .Values.images.consumer }}
+        imagePullPolicy: IfNotPresent
+        name: {{ template "paymentdomain.consumer.fullname" . }}
+        resources:
+          limits:
+            cpu: {{ .Values.resources.consumer.limits.cpu }}
+            memory: {{ .Values.resources.consumer.limits.memory }}
+          requests:
+            cpu: {{ .Values.resources.consumer.requests.cpu }}
+            memory: {{ .Values.resources.consumer.requests.memory }}
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /config
+          name: config
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext: {}
+      terminationGracePeriodSeconds: 30
+      volumes:
+      - configMap:
+          defaultMode: 420
+          items:
+          - key: config.json
+            path: config.json
+          name: paymentdomain
+        name: config

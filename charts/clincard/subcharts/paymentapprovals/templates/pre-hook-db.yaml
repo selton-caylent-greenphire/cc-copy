@@ -1,0 +1,102 @@
+{{- if .Values.preHook.enabled }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ template "paymentapprovals.fullname" . }}-pre-hook
+  labels: {{ include "paymentapprovals.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: pre-install
+    helm.sh/hook-weight: "-1"
+    helm.sh/hook-delete-policy: before-hook-creation
+spec:
+  backoffLimit: 1
+  completions: 1
+  parallelism: 1
+  template:
+    metadata:
+      name: {{ template "paymentapprovals.fullname" . }}}-pre-hook
+    spec:
+      restartPolicy: Never
+      initContainers:
+      - name: wait-for-postgres
+        image: {{ include "pgimage" . }}
+        command: ['sh', '-c', 'until pg_isready -h {{ include "db_svc" . }}.{{ .Release.Namespace }} -U {{ include "db_usr" . }} ; do echo waiting for database; sleep 2; done;']
+      - name: wait-for-portal
+        image: {{ include "pgimage" . }}
+        command: ['sh', '-c', 'until psql -d {{ include "portaldb_pdb" .}} -h {{ include "portaldb_psvc" . }}.{{ .Release.Namespace }} -U {{ include "portaldb_pusr" . }} postgres -v ON_ERROR_STOP=1; do echo waiting for database; sleep 2; done;']
+        env:
+        - name: PGPASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: postgres-{{ include "portaldb_pusr" . }}
+              name: {{ .Values.dependencies.clincardsecrets }}-pre-hook
+      containers:
+      - name: create-database-and-user
+        env:
+        - name: PGPASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: admin-microservicedb-{{ include "db_adm" . }}
+              name: {{ .Values.dependencies.postgresadmin }}-pre-hook
+        - name: PGSVCPASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: postgres-{{ include "db_usr" . }}
+              name: {{ .Values.dependencies.clincardsecrets }}-pre-hook
+        image: {{ include "pgimage" . }}
+        command: ["sh", "-c"]
+        args:
+          - |
+            psql -h {{ include "db_svc" . }}.{{ .Release.Namespace }} -U {{ include "db_adm" . }} -d postgres -v "ON_ERROR_STOP=1" << EOF &&
+            DO
+            \$\$
+            BEGIN
+              IF NOT EXISTS (
+                SELECT FROM pg_catalog.pg_roles
+                WHERE  rolname = '{{ include "db_usr" . }}')
+              THEN
+                CREATE ROLE {{ include "db_usr" . }} LOGIN PASSWORD '$(PGSVCPASSWORD)';
+                GRANT ALL ON DATABASE {{ include "db_db" . }} TO {{ include "db_usr" . }};
+                GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO {{ include "db_usr" . }};
+                GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO {{ include "db_usr" . }};
+              END IF;
+            END
+            \$\$;
+            EOF
+            echo "SELECT 'CREATE DATABASE {{ include "db_db" . }} WITH OWNER = {{ include "db_usr" . }}' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = '{{ include "db_db" . }}')\\gexec" | psql -h {{ include "db_svc" . }}.{{ .Release.Namespace }} -U {{ include "db_adm" . }} -d postgres
+      - name: create-portaldb-user
+        image: {{ include "pgimage" . }}
+        env:
+        - name: PGPASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: admin-portaldb-{{ include "portaldb_adm" . }}
+              name: {{ .Values.dependencies.postgresadmin }}-pre-hook
+        - name: PGSVCPASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: postgres-{{ include "portaldb_pusr" . }}
+              name: {{ .Values.dependencies.clincardsecrets }}-pre-hook
+        image: {{ include "pgimage" . }}
+        command: ["sh", "-c"]
+        args:
+          - |
+            psql -h {{ include "portaldb_psvc" .}}.{{ .Release.Namespace }} -U {{ include "portaldb_adm" . }} -d postgres -v "ON_ERROR_STOP=1" << EOF
+            DO
+            \$\$
+            BEGIN
+              IF NOT EXISTS (
+                SELECT FROM pg_catalog.pg_roles
+                WHERE  rolname = '{{ include "portaldb_pusr" . }}')
+              THEN
+                CREATE ROLE {{ include "portaldb_pusr" . }} LOGIN PASSWORD '$(PGSVCPASSWORD)';
+                GRANT ALL ON DATABASE {{ include "portaldb_pdb" . }} TO {{ include "portaldb_pusr" . }};
+                GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO {{ include "portaldb_pusr" . }};
+                GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO {{ include "portaldb_pusr" . }};
+              ELSE
+                ALTER ROLE {{ include "portaldb_pusr" . }} LOGIN PASSWORD '$(PGSVCPASSWORD)';
+              END IF;
+            END
+            \$\$;
+            EOF
+{{- end }}

@@ -1,0 +1,123 @@
+{{- $usr := get (include "couchdb" . | fromJson) "user" -}}
+{{- $svc := get (include "couchdb" . | fromJson) "service" -}}
+{{- $dbpis := get (include "couchdb" . | fromJson) "db_pis" -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: {{ template "tenninetynine.name" . }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    tier: {{ .Values.tier }}
+    component: "{{ .Values.name }}"
+    heritage: {{ .Release.Service }}
+    release: {{ .Release.Name }}
+  name: {{ template "tenninetynine.fullname" . }}
+spec:
+  progressDeadlineSeconds: 600
+  replicas: {{ .Values.resources.service.replicas }}
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app: {{ template "tenninetynine.name" . }}
+      chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+      tier: {{ .Values.tier }}
+      component: "{{ .Values.name }}"
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: {{ template "tenninetynine.name" . }}
+        chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+        tier: {{ .Values.tier }}
+        component: "{{ .Values.name }}"
+    spec:
+      initContainers:
+      - name: wait-for-couchdb
+        image: alpine:3.7
+        command: ["sh", "-c", "apk add curl && until curl --fail --connect-timeout 5 http://{{ $svc}}.{{ .Release.Namespace}}:5984/_up; do sleep 5; done"]
+      containers:
+      - args:
+        - "-c"
+        - "pip install python-logstash git+https://github.com/Greenphire/jslog4kube.git && tenninetyninereport"
+        command: ["/bin/bash"]
+        env: {{ include "opentelemetry_envs" . | nindent 8 -}}
+        - name: COUCH_DB
+          value: {{ $dbpis }}
+        - name: COUCH_USER
+          value: {{ $usr }}
+        - name: COUCH_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: password
+              name: couchdb-secret
+        - name: COUCH_URL
+          value: {{ printf "http://%s:$(COUCH_PASSWORD)@%s.%s:5984/" $usr $svc .Release.Namespace }}
+        - name: CONFIG_FILE_PATH
+          value: /config/config.json
+        image: {{ .Values.image }}
+        imagePullPolicy: IfNotPresent
+        name: tenninetynine
+        ports:
+        - containerPort: 8080
+          name: tenninetynine
+          protocol: TCP
+        readinessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /swagger.json
+            port: 8080
+            scheme: HTTP
+          initialDelaySeconds: 3
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 2
+        resources:
+          limits:
+            cpu: {{ .Values.resources.service.limits.cpu }}
+            memory: {{ .Values.resources.service.limits.memory }}
+          requests:
+            cpu: {{ .Values.resources.service.requests.cpu }}
+            memory: {{ .Values.resources.service.requests.memory }}
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /config
+          name: config
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext: {}
+      terminationGracePeriodSeconds: 30
+      volumes:
+      - configMap:
+          defaultMode: 420
+          items:
+          - key: config.json
+            path: config.json
+          name: tenninetynine
+        name: config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: {{ template "tenninetynine.name" . }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    tier: {{ .Values.tier }}
+    component: "{{ .Values.name }}"
+    heritage: {{ .Release.Service }}
+    release: {{ .Release.Name }}
+  name: {{ template "tenninetynine.fullname" . }}
+spec:
+  clusterIP: None
+  ports:
+    - port: 8080
+  selector:
+    app: {{ template "tenninetynine.name" . }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    tier: {{ .Values.tier }}
+    component: "{{ .Values.name }}"

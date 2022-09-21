@@ -1,0 +1,14 @@
+{{- if .Values.enabled }}
+{{- if ne .Release.Namespace "prod" }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "datasupport.fullname" . }}
+  labels: {{ include "datasupport.labels" . | nindent 4 }} 
+data:
+  {{- range .Values.configMapJson }}
+  {{ .dataKey }}: {{ include (print $.Template.BasePath .dataKeyTemplateSrc ) . | toYaml | indent 4 }}
+  {{- end }}  
+{{- end }}
+{{- end }}

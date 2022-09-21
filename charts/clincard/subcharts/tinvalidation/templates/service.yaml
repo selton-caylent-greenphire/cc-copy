@@ -1,0 +1,16 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels: {{ include "tinvalidation.labels" . | nindent 4 }}
+  name: {{ template "tinvalidation.fullname" . }}
+spec:
+  ports:
+  - port: 8080
+    protocol: TCP
+    targetPort: 8080
+  selector:
+    app: {{ template "tinvalidation.fullname" . }}
+    tier: {{ .Values.tier }}
+  sessionAffinity: None
+  type: ClusterIP

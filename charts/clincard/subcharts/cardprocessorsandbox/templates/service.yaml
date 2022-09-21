@@ -1,0 +1,20 @@
+{{- if and .Values.enabled  .Values.service.enabled }}
+{{- if ne .Release.Namespace "prod" }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels: {{ include "cardprocessorsandbox.labels" . | nindent 4 }}
+  name: {{ template "cardprocessorsandbox.fullname" . }}
+spec:
+  clusterIP: {{ default "None" .Values.service.clusterIP }}
+  ports:
+  - port: {{ default 8080 .Values.service.port }}
+    protocol: {{ default "TCP" .Values.service.protocol }}
+    targetPort: {{ default 8080 .Values.service.targetPort }}
+  selector: {{ include "cardprocessorsandbox.selectorLabels" . | nindent 4 }}
+    component: {{ template "cardprocessorsandbox.fullname" . }}
+  sessionAffinity: {{ default "None" .Values.service.sessionAffinity }}
+  type: {{ default "ClusterIP" .Values.service.type }}
+{{- end }}
+{{- end }}

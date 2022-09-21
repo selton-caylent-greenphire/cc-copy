@@ -1,0 +1,42 @@
+{{- if .Values.sendIssuanceFundingReport.enabled }}
+{{- $cronjob := .Values.sendIssuanceFundingReport}}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ $cronjob.name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    component: {{ $cronjob.name }}
+{{ include "cronjobs.labels" . | indent 4 }}
+spec:
+  successfulJobsHistoryLimit: {{ default .Values.historyLimits.successfulJobsHistoryLimit $cronjob.successfulJobsHistoryLimit }}
+  failedJobsHistoryLimit: {{ default .Values.historyLimits.failedJobsHistoryLimit $cronjob.failedJobsHistoryLimit }}
+  concurrencyPolicy: {{ default .Values.concurrencyPolicy $cronjob.concurrencyPolicy }}  
+  schedule: {{ $cronjob.schedule | quote }}
+  suspend: {{ default .Values.suspend $cronjob.suspend }}
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: {{ default "task" $cronjob.containersName }}
+            image: {{ default .Values.image $cronjob.image}}
+            imagePullPolicy: {{ default .Values.imagePullPolicy $cronjob.imagePullPolicy}}
+            args: {{ toJson $cronjob.args }}
+            env:              
+{{ include (print .Template.BasePath "/_commons_env.yaml.tpl" ) . |  indent 14 }}
+            resources:
+              limits:
+                cpu: {{ default .Values.resources.limits.cpu $cronjob.resourcesLimitsCpu }}
+                memory: {{ default .Values.resources.limits.memory $cronjob.resourcesLimitsMemory }}
+              requests:
+                cpu: {{ default .Values.resources.requests.cpu $cronjob.resourcesRequestsCpu }}
+                memory: {{ default .Values.resources.requests.memory $cronjob.resourcesRequestsMemory }}            
+          restartPolicy: {{ default .Values.restartPolicy $cronjob.restartPolicy}}
+          schedulerName: {{ default .Values.schedulerName $cronjob.schedulerName}}
+          {{- with $cronjob.securityContext }}
+          securityContext:
+          {{- toYaml . | nindent 12 }}
+          {{- end }}          
+{{- end }}

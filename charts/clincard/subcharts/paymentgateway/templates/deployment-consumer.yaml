@@ -1,0 +1,106 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "paymentgateway.consumer.fullname" . }}
+  labels: {{ include "paymentgateway.labels" . | nindent 4 }}
+    tier: {{ .Values.consumer.tier }}
+spec:
+  selector:
+    matchLabels:
+      app: {{ include "paymentgateway.consumer.fullname" . }}
+      tier: {{ .Values.consumer.tier }}
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.consumer.replicaCount }}
+  {{- end }}
+  progressDeadlineSeconds: {{ default 600 .Values.consumer.progressDeadlineSeconds }}
+  revisionHistoryLimit: {{ default 10 .Values.consumer.revisionHistoryLimit }}
+  {{- if .Values.rollingUpdateDeploymentStrategy.enabled }}
+  strategy: 
+    type: {{ default "RollingUpdate" .Values.deploymentStrategyType }}
+    rollingUpdate:
+      maxSurge: {{ .Values.consumer.rollingUpdate.maxSurge }}
+      maxUnavailable: {{ .Values.consumer.rollingUpdate.maxUnavailable }}
+  {{- end }}
+  template:
+    metadata:
+      labels:
+        app: {{ include "paymentgateway.consumer.fullname" . }}
+        tier: {{ .Values.consumer.tier }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- if .Values.initContainersSrc }}
+      initContainers:
+{{ include (print .Template.BasePath .Values.initContainersSrc ) . |  indent 8 }}
+      {{- end }}
+      containers:
+      - name: {{ include "paymentgateway.consumer.fullname" . }}
+        image: {{ .Values.consumer.image }}
+        imagePullPolicy: {{ default "IfNotPresent" .Values.imagePullPolicy }}
+        command:
+          - /bin/bash
+        args:
+        - -c
+        - pip install python-logstash && payment-gateway-consumer
+        env:
+{{ include (print .Template.BasePath "/_commons_env.yaml.tpl" ) . |  indent 8 }}
+        {{- with .Values.readinessProbe }}
+        readinessProbe:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with .Values.livenessProbe }}
+        livenessProbe:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        resources:
+          limits:
+            cpu: {{ default "100m" .Values.consumer.resources.limits.cpu }}
+            memory: {{ default "200Mi" .Values.consumer.resources.limits.memory }}
+          requests:
+            cpu: {{ default "50m" .Values.consumer.resources.requests.cpu }}
+            memory: {{ default "50Mi" .Values.consumer.resources.requests.memory }}
+        terminationMessagePath: {{ default "/dev/termination-log" .Values.containersTerminationMessagePath}}
+        terminationMessagePolicy: {{ default "File" .Values.containersTerminationMessagePolicy}}
+        volumeMounts:
+        - mountPath: {{ default "/config" .Values.containersVolumeMountsMountPath}}
+          name: {{ default "config" .Values.containersVolumeMountsName}}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "paymentgateway.serviceAccountName" . }}
+      {{- with .Values.securityContext }}
+      securityContext:
+        {{- toYaml .Values.securityContext | nindent 8 }}
+      {{- end }} 
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.dnsPolicy }}
+      dnsPolicy: {{ .Values.dnsPolicy }}
+      {{- end }}
+      {{- if .Values.restartPolicy }}
+      restartPolicy: {{ .Values.restartPolicy }}
+      {{- end }}
+      {{- if .Values.schedulerName }}
+      schedulerName: {{ .Values.schedulerName }}
+      {{- end }}
+      {{- if .Values.terminationGracePeriodSeconds }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      {{- end }}
+      {{- with .Values.volumes }}
+      volumes:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

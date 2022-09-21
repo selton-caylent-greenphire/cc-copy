@@ -1,0 +1,113 @@
+{{- $usr := get (include "db" . | fromJson) "username" -}}
+{{- $svc := get (include "db" . | fromJson) "service" -}}
+{{- $db := get (include "db" . | fromJson) "database" -}}
+{{- $db_adm := get (include "db" . | fromJson) "db_admin" -}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ template "paymentdomain.fullname" . }}-schema-migration
+  labels:
+    app: {{ template "paymentdomain.name" . }}
+    component: {{ template "paymentdomain.fullname" . }}
+    release: {{ .Release.Name }}
+    tier: {{ .Values.tier }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    heritage: {{ .Release.Service }}
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-1"
+    "helm.sh/hook-delete-policy": before-hook-creation
+spec:
+  backoffLimit: 1
+  completions: 1
+  parallelism: 1
+  template:
+    metadata:
+      name: {{ template "paymentdomain.fullname" . }}-schema-migration
+    spec:
+      initContainers:
+      - name: wait-for-postgres
+        image: {{ include "pgimage" . }}
+        command: ['sh', '-c', 'until pg_isready -h {{ $svc }}.{{ .Release.Namespace }} -U {{ $usr }} ; do echo waiting for database; sleep 2; done;']
+      - name: create-database-and-user
+        env:
+        - name: PGPASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: admin-microservicedb-{{ $db_adm }}
+              name: {{ .Values.dependencies.postgresadmin }}
+        - name: PGSVCPASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: postgres-{{ $usr }}
+              name: {{ .Values.dependencies.clincardsecrets }}-pre-hook
+        image: {{ include "pgimage" . }}
+        command: ["sh", "-c"]
+        args:
+          - |
+            psql -h {{ $svc}}.{{ .Release.Namespace }} -U {{ $db_adm }} -d postgres -v "ON_ERROR_STOP=1" << EOF &&
+            DO
+            \$\$
+            BEGIN
+              IF NOT EXISTS (
+                SELECT FROM pg_catalog.pg_roles
+                WHERE  rolname = '{{ $usr }}')
+              THEN
+                CREATE ROLE {{ $usr }} LOGIN PASSWORD '$(PGSVCPASSWORD)';
+                GRANT ALL ON DATABASE {{ $db }} TO {{ $usr }};
+                GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO {{ $usr }};
+                GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO {{ $usr }};
+              END IF;
+            END
+            \$\$;
+            EOF
+            echo "SELECT 'CREATE DATABASE {{ $db }} WITH OWNER = {{ $usr }}' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = '{{ $db}}')\\gexec" | psql -h {{ $svc }}.{{ .Release.Namespace }} -U {{ $db_adm }} -d postgres
+      containers:
+        - args:
+            - -c
+            - pip install python-logstash && cd /app && python run_alembic_migration.py
+          command:
+            - /bin/bash
+          env:
+            - name: CONFIG_FILE_PATH
+              value: /config/config.json
+            - name: DB_PASS
+              valueFrom:
+                secretKeyRef:
+                  key: postgres-{{ $usr }}
+                  name: {{ .Values.dependencies.clincardsecrets }}-pre-hook
+            - name: DB_URI
+              value: {{ printf "postgresql://%s:$(DB_PASS)@%s.%s/%s" $usr $svc .Release.Namespace $db }}
+            # Following 2 ENV variables are available to use but are not required
+            # - name: ALEMBIC_TARGET_REVISION
+            #  value: DESIRED ALEMBIC MIGRATION HASH. THIS CONTROLS WHAT VERSION OF THE DB WE UPGRADE TO
+            # - name: ALEMBIC_INI_PATH
+            #  value: LOCATION OF THE "almebic.ini" file. DEFAULTS TO /app/alembic.ini which should be correct.
+          image: {{ .Values.images.service}}
+          imagePullPolicy: IfNotPresent
+          name: {{ template "paymentdomain.fullname" . }}-schema-migration
+          resources:
+            limits:
+              cpu: 250m
+              memory: 256Mi
+            requests:
+              cpu: 125m
+              memory: 64Mi
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          volumeMounts:
+            - mountPath: /config
+              name: config
+      dnsPolicy: ClusterFirst
+      restartPolicy: Never
+      schedulerName: default-scheduler
+      securityContext: { }
+      terminationGracePeriodSeconds: 30
+      volumes:
+        - configMap:
+            defaultMode: 420
+            items:
+              - key: config.json
+                path: config.json
+            name: paymentdomain
+          name: config

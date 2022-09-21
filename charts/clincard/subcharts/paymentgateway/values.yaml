@@ -1,0 +1,103 @@
+name: paymentgateway
+nameOverride: paymentgateway
+fullnameOverride: paymentgateway
+secretpath: lower
+tier: payment
+
+consumer:
+  tier: consumer
+  replicaCount: 2
+  image: 160116585046.dkr.ecr.us-east-1.amazonaws.com/clincard/paymentgateway-consumer:2.0.0
+  revisionHistoryLimit: 10
+  progressDeadlineSeconds: 600
+  rollingUpdate:
+    maxSurge: 10%
+    maxUnavailable: 10%
+  resources:
+    limits:
+      cpu: 256m
+      memory: 256Mi
+    requests:
+      cpu: 10m
+      memory: 64Mi
+
+service:
+  enabled: true
+  tier: service
+  replicaCount: 2
+  image: 160116585046.dkr.ecr.us-east-1.amazonaws.com/clincard/paymentgateway-service:2.0.0
+  revisionHistoryLimit: 10
+  progressDeadlineSeconds: 600
+  rollingUpdate:
+    maxSurge: 10%
+    maxUnavailable: 10%
+  resources:
+    limits:
+      cpu: 256m
+      memory: 256Mi
+    requests:
+      cpu: 10m
+      memory: 64Mi
+
+dependencies:
+  # -- Secrets service dependency **Rabbit-mq**
+  rabbitmqSecrets: rabbitmq-secrets
+  # -- Service dependency [configsvc](https://github.com/Greenphire/clincard-config/tree/uat/charts/clincard/subcharts/configsvc)
+  configsvc: configsvc
+  # -- Service dependency [paymentdomain](https://github.com/Greenphire/clincard-config/tree/uat/charts/clincard/subcharts/paymentdomain)
+  paymentdomain: paymentdomain
+  # -- Service dependency [paymentevents](https://github.com/Greenphire/clincard-config/tree/uat/charts/clincard/subcharts/paymentevents)
+  paymentevents: paymentevents
+
+# The below values can be overridden by parent chart global values. 
+# See clincard chart values.yaml file.
+# Start - chart global values
+db:
+  service: paymentdb-postgres
+  database: paymentgateway
+  username: paymentgateway
+  db_admin: clincard
+
+portaldb:
+  service: portaldb-postgres
+  database: ccportaldatabase
+  username: paymentgateway
+  db_admin: clincard
+
+rabbit:
+  username: payments
+  service: rabbit-rabbitmq-ha
+# end - chart global values
+
+volumes:
+  - name: config 
+    configMap:
+      defaultMode: 420
+      items:
+      - key: config.json
+        path: config.json
+      name: paymentgateway
+
+configMapJson:
+  - dataKey: config.json
+    dataKeyTemplateSrc: "/_configmap.json.tpl"
+    loggerServiceName: paymentgateway
+
+autoscaling:
+  enabled: false
+  minReplicas: 5
+  maxReplicas: 15
+  targetCPUUtilizationPercentage: 80
+  targetMemoryUtilizationPercentage: 80
+
+serviceAccount:
+  create: false 
+  name: ""
+
+dnsPolicy: ClusterFirst
+restartPolicy: Always
+schedulerName: default-scheduler    
+terminationGracePeriodSeconds: 30
+
+rollingUpdateDeploymentStrategy:
+  enabled: true

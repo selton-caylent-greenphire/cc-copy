@@ -1,0 +1,14 @@
+apiVersion: v2
+name: ccadmin
+description: Helm chart with the ccadmin definition
+type: application
+version: 0.1.22
+appVersion: "1.0"
+maintainers:
+- name: Helene McElroy
+  email: helene.mcelroy@greenphire.com
+- name: Jeisson Osorio
+  email: jeisson.osorio@greenphire.com
+keywords:  
+  - ccadmin
+  - KONG-Subordinates

@@ -1,0 +1,14 @@
+apiVersion: v2
+name: swagger-ui
+description: A Helm chart deploying ClinCard swagger-ui
+type: application
+version: 0.2.0
+appVersion: "1.0"
+maintainers:
+- name: Chanh Ha
+  email: chanh.ha@greenphire.com
+- name: Thuy Hoang
+  email: thuy.hoang@greenphire.com
+keywords:
+  - swagger-ui
+  - external_apis

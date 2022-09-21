@@ -1,0 +1,17 @@
+{{- if and .Values.enabled  .Values.service.enabled }}
+{{- if ne .Release.Namespace "prod" }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels: {{ include "datasupport.labels" . | nindent 4 }}
+  name: {{ template "datasupport.fullname" . }}
+spec:
+  ports:
+  - port: {{ default 5000 .Values.service.port }}
+    protocol: {{ default "TCP" .Values.service.protocol }}
+    targetPort: {{ default 5000 .Values.service.targetPort }}
+  selector: {{ include "datasupport.selectorLabels" . | nindent 4 }}
+    component: {{ template "datasupport.fullname" . }}
+{{- end }}
+{{- end }}

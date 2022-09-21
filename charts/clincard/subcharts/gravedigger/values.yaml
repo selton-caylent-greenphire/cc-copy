@@ -1,0 +1,98 @@
+name: gravedigger
+nameOverride: gravedigger
+fullnameOverride: gravedigger
+secretpath: lower
+
+consumer:
+  tier: consumer
+  replicas: 2
+  image: 160116585046.dkr.ecr.us-west-2.amazonaws.com/gravedigger-consumer:1.1.6
+  revisionHistoryLimit: 10
+  progressDeadlineSeconds: 600
+  rollingUpdate:
+    maxSurge: 10%
+    maxUnavailable: 10%
+  resources:
+    limits:
+      cpu: 256m
+      memory: 100Mi
+    requests:
+      cpu: 10m
+      memory: 50Mi
+
+service:
+  tier: api
+  replicas: 2
+  image: 160116585046.dkr.ecr.us-west-2.amazonaws.com/gravedigger-service:1.1.6
+  revisionHistoryLimit: 10
+  progressDeadlineSeconds: 600
+  rollingUpdate:
+    maxSurge: 10%
+    maxUnavailable: 10%
+  resources:
+    limits:
+      cpu: 600m
+      memory: 300Mi
+    requests:
+      cpu: 200m
+      memory: 100Mi
+  readinessProbe:
+    failureThreshold: 3
+    httpGet:
+      path: /swagger.json
+      port: 8080
+      scheme: HTTP
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    successThreshold: 1
+    timeoutSeconds: 5
+
+shoveler:
+  enable: true
+  failedJobsHistoryLimit: 3
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  schedule: "*/30 * * * *"
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+volumes:
+- configMap:
+    defaultMode: 420
+    items:
+    - key: config.json
+      path: config.json
+    name: gravedigger
+  name: config
+
+serviceAccount:
+  create: false
+  name: ""
+
+configMapJson:
+  - dataKey: config.json
+    dataKeyTemplateSrc: "/_configmap.json.tpl"
+    loggerServiceName: gravedigger
+    gunicornTimeout: 180
+
+dependencies:
+  postgresadmin: postgres-admin
+  # -- Secrets dependency [clincard](https://github.com/Greenphire/clincard-config/tree/uat/charts/clincard)
+  clincardsecrets: clincard-secret
+
+# The below values can be overridden by parent chart global values.
+# See clincard chart values.yaml file.
+postgres:
+  image: bitnami/postgresql:11.6.0-debian-9-r0
+
+db:
+  service: microservicedb-postgres
+  database: gravedigger
+  username: gravedigger
+  db_admin: clincard
+
+rabbit:
+  username: payments
+  service: rabbit-rabbitmq-ha

@@ -1,0 +1,65 @@
+{{- if .Values.sendAppointmentReminders.enabled }}
+{{- $cronjob := .Values.sendAppointmentReminders}}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ $cronjob.name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    component: {{ $cronjob.name }}
+{{ include "cronjobs.labels" . | indent 4 }}
+spec:
+  successfulJobsHistoryLimit: {{ default .Values.historyLimits.successfulJobsHistoryLimit $cronjob.successfulJobsHistoryLimit }}
+  failedJobsHistoryLimit: {{ default .Values.historyLimits.failedJobsHistoryLimit $cronjob.failedJobsHistoryLimit }}
+  concurrencyPolicy: {{ default .Values.concurrencyPolicy $cronjob.concurrencyPolicy }}
+  schedule: {{ $cronjob.schedule | quote }}
+  suspend: {{ default .Values.suspend $cronjob.suspend }}
+  jobTemplate:
+    spec:
+      backoffLimit: {{ $cronjob.backoffLimit }}
+      template:
+        metadata:
+          labels:
+{{ include "cronjobs.labels" . | indent 12 }}
+        spec:
+          containers:
+          - name: {{ default "task" $cronjob.containersName }}
+            image: {{ default .Values.image $cronjob.image}}
+            imagePullPolicy: {{ default .Values.imagePullPolicy $cronjob.imagePullPolicy}}
+            args: {{ toJson $cronjob.args }}
+            env:
+{{ include (print .Template.BasePath "/_commons_env.yaml.tpl" ) . |  indent 14 }}
+{{- include (print .Template.BasePath "/_commons_twilio_env.yaml.tpl" ) . |  indent 14 }}
+{{- range $key, $value := $cronjob.customEnv }}
+              - name: {{ $key }}
+                value: {{ $value | quote }}
+{{- end }}
+              - name: RABBIT_PASS
+                valueFrom:
+                  secretKeyRef:
+                    key: rabbit_userpass
+                    name: {{ .Values.dependencies.clincardsecrets }}
+              - name: RABBIT_CELERY_PASS
+                valueFrom:
+                  secretKeyRef:
+                    key: celery
+                    name: {{ .Values.dependencies.rabbitsecrets }}
+              - name: CELERY_RABBITMQ_URL
+                value: {{ printf "amqp://%s:$(RABBIT_CELERY_PASS)@%s.%s:5672/celery" (include "cel_usr" .) (include "cel_svc" .) .Release.Namespace }}
+              - name: RABBITMQ_URL
+                value: {{ printf "amqp://%s:$(RABBIT_PASS)@%s.%s:5672/" (include "rmq_usr" .) (include "rmq_svc" .) .Release.Namespace }}
+            resources:
+              limits:
+                cpu: {{ default .Values.resources.limits.cpu $cronjob.resourcesLimitsCpu }}
+                memory: {{ default .Values.resources.limits.memory $cronjob.resourcesLimitsMemory }}
+              requests:
+                cpu: {{ default .Values.resources.requests.cpu $cronjob.resourcesRequestsCpu }}
+                memory: {{ default .Values.resources.requests.memory $cronjob.resourcesRequestsMemory }}
+          restartPolicy: {{ default .Values.restartPolicy $cronjob.restartPolicy}}
+          schedulerName: {{ default .Values.schedulerName $cronjob.schedulerName}}
+          {{- with $cronjob.securityContext }}
+          securityContext:
+          {{- toYaml . | nindent 12 }}
+          {{- end }} 
+{{- end }}

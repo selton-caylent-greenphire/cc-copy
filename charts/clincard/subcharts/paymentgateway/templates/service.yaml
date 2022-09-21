@@ -1,0 +1,23 @@
+{{- if and .Values.service  .Values.service.enabled}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "paymentgateway.fullname" . }}
+  labels: {{ include "paymentgateway.labels" . | nindent 4 }}
+spec:
+  selector: {{ include "paymentgateway.selectorLabels" . | nindent 4 }}
+    tier: {{ .Values.service.tier }}
+  type: {{ .Values.service.type }}
+  clusterIP: {{ default "None" .Values.service.clusterIP }}   
+  ports:    
+    - name: {{ default "http" .Values.service.portName | quote }}
+      port: {{ default 8080 .Values.service.port }}
+      protocol: {{ default "TCP" .Values.service.protocol }} 
+      targetPort: {{ default 8080 .Values.service.targetPort }}  
+  sessionAffinity: {{ default "None" .Values.service.sessionAffinity }}
+  {{- if .Values.service.sessionAffinityConfig }}
+  sessionAffinityConfig:
+{{ toYaml .Values.service.sessionAffinityConfig | trim | indent 4 }}    
+  {{- end }}
+{{- end }}

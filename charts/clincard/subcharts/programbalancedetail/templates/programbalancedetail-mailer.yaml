@@ -1,0 +1,120 @@
+{{- $csvc := get (include "couchdb" . | fromJson) "service" -}}
+{{- $pusr := get (include "portaldb" . | fromJson) "username" -}}
+{{- $psvc := get (include "portaldb" . | fromJson) "service" -}}
+{{- $pdb := get (include "portaldb" . | fromJson) "database" -}}
+{{- if eq .Values.mailer.enabled true}}
+apiVersion: batch/v1beta1
+kind: CronJob
+metadata:
+  name: {{ template "programbalancedetail.name" . }}-mailer
+  labels:
+    app: {{ template "programbalancedetail.name" . }}
+    component: {{ template "programbalancedetail.name" . }}-mailer
+    release: {{ .Release.Name }}
+    tier: cronjob
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    heritage: {{ .Release.Service }}
+spec:
+  concurrencyPolicy: Forbid
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      template:
+        spec:
+          containers:
+          - args:
+              - -c
+              - pip install python-logstash git+https://github.com/Greenphire/jslog4kube.git && programbalancedetail-mailer
+            command:
+            - /bin/bash
+            env:
+            - name: DB_PASS
+              valueFrom:
+                secretKeyRef:
+                  key: postgres-{{ $pusr }}
+                  name: {{ template "programbalancedetail.fullname" . }}
+            - name: CLINCARD_DB_URI
+              value: {{ printf "postgresql://%s:$(DB_PASS)@%s.%s/%s" $pusr $psvc .Release.Namespace $pdb }}
+            - name: CONFIG_FILE_PATH
+              value: /config/config.json
+            - name: COUCH_DB
+              value: {{ .Values.couchdb.db_pbdr }}
+            - name: COUCH_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: password
+                  name: couchdb-secret
+            - name: COUCH_USER
+              value: {{ .Values.couchdb.user }}
+            - name: COUCH_URL
+              value: {{ printf "http://%s.%s:5984/" $csvc .Release.Namespace }}
+            - name: EMAIL_HOST
+              value: {{ .Values.mailer.email_host }}
+            - name: EMAIL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: sendgrid-api-key
+                  name: {{ template "programbalancedetail.fullname" . }}
+            - name: EMAIL_USER
+              value: {{ .Values.mailer.email_user | quote}}
+            - name: EMAIL_PORT
+              value: {{ .Values.mailer.email_port | quote}}
+            - name: EMAIL_USE_TLS
+              value: {{ .Values.mailer.use_tls | quote}}
+            # Application code does not convert to integer like EMAIL_USE_TLS variable so we have no
+            # way to pass a Falsy value, so we must prevent it completely from the deployment
+            {{- if eq .Values.mailer.no_login "1" }}
+            - name: EMAIL_NO_LOGIN
+              value: {{ .Values.mailer.no_login | quote }}
+            {{- end }}
+            - name: PBDR_UPLOAD_HOST
+              value: {{ .Values.mailer.upload_host }}
+            - name: PBDR_UPLOAD_PATH
+              value: {{ .Values.mailer.upload_path}}
+            - name: PBDR_UPLOAD_USER
+              value: {{ .Values.mailer.upload_user}}
+            - name: PBDR_URL_BASE
+              value: {{ .Values.mailer.url_base }}
+            - name: RIDESHARE_SWAGGER
+              value: http://{{ .Values.dependencies.ridesharesvc}}.{{ .Release.Namespace}}:8080/swagger.json
+            - name: XLSX_TMP_DIR
+              value: {{ .Values.mailer.xls_tmp_dir }}
+            image: {{ .Values.images.mailer }}
+            imagePullPolicy: Always
+            name: task
+            resources:
+              requests:
+                memory: {{ .Values.resources.mailer.requests.memory }}
+                cpu: {{ .Values.resources.mailer.requests.cpu }}
+              limits:
+                memory: {{ .Values.resources.mailer.limits.memory }}
+                cpu: {{ .Values.resources.mailer.limits.cpu }}
+            volumeMounts:
+            - mountPath: /root/.ssh
+              name: cc-ssh
+            - mountPath: /config
+              name: config
+          restartPolicy: Never
+          schedulerName: default-scheduler
+          securityContext: {}
+          {{- if .Values.mailer.hostAliases }}
+          hostAliases:
+{{ toYaml .Values.mailer.hostAliases | indent 12 }}
+          {{- end }}
+          volumes:
+            - name: cc-ssh
+              secret:
+                secretName: {{ template "programbalancedetail.name" . }}
+            - configMap:
+                defaultMode: 420
+                items:
+                  - key: config.json
+                    path: config.json
+                name: {{ template "programbalancedetail.name" . }}
+              name: config
+  schedule: "0 */2 * * *"
+  startingDeadlineSeconds: 10000000
+  successfulJobsHistoryLimit: 3
+  suspend: false
+{{- end }}

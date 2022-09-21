@@ -1,0 +1,138 @@
+{{- $csvc := get (include "couchdb" . | fromJson) "service" -}}
+{{- $dbpis := get (include "couchdb" . | fromJson) "db_pis" -}}
+{{- $dbpbdr := get (include "couchdb" . | fromJson) "db_pbdr" -}}
+{{- $cusr := get (include "couchdb" . | fromJson) "user" -}}
+{{- $pusr := get (include "portaldb" . | fromJson) "username" -}}
+{{- $psvc := get (include "portaldb" . | fromJson) "service" -}}
+{{- $pdb := get (include "portaldb" . | fromJson) "database" -}}
+{{- $pdb_adm := get (include "portaldb" . | fromJson) "db_admin" -}}
+{{- $rmq_usr := get (include "rabbit" . | fromJson) "username" }}
+{{- $rmq_svc := get (include "rabbit" . | fromJson) "service" }}
+{{- $usr := get (include "db" . | fromJson) "username" -}}
+{{- $svc := get (include "db" . | fromJson) "service" -}}
+{{- $db := get (include "db" . | fromJson) "database" -}}
+{{- $db_adm := get (include "db" . | fromJson) "db_admin" -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels: {{ include "paymentindex.labels" . | nindent 4 }}
+    app: {{ template "paymentindex.name" . }}
+    component: "{{ .Values.name }}"
+    release: {{ .Release.Name }}
+    tier: {{ .Values.tier }}
+  name: {{ template "paymentindex.fullname" . }}
+spec:
+  progressDeadlineSeconds: 600
+  {{- if not .Values.resources.consumer.autoscaling.enabled }}
+  replicas: {{ .Values.resources.consumer.replicas }}
+  {{- end }}
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app: {{ template "paymentindex.name" . }}
+      component: "{{ .Values.name }}"
+      release: {{ .Release.Name }}
+      tier: {{ .Values.tier }}
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: {{ template "paymentindex.name" . }}
+        component: "{{ .Values.name }}"
+        release: {{ .Release.Name }}
+        tier: {{ .Values.tier }}
+    spec:
+      initContainers:
+      - name: wait-for-couchdb
+        image: alpine:3.7
+        command: ["sh", "-c", "apk add curl && until curl --fail --connect-timeout 5 http://{{ $csvc }}.{{ .Release.Namespace}}:5984/_up; do sleep 5; done"]
+      - name: wait-for-postgres
+        image: {{ include "pgimage" . }}
+        command: ['sh', '-c', 'until pg_isready -h {{ $svc }}.{{ .Release.Namespace }} -U {{ $usr }} ; do echo waiting for database; sleep 5; done;']
+      containers:
+      - env: {{ include "opentelemetry_envs" . | nindent 8 -}}
+        - name: PORTALDB_PASS
+          valueFrom:
+            secretKeyRef:
+              key: postgres-{{ $pusr }}
+              name: {{ template "paymentindex.fullname" . }}
+        - name: DB_PASS
+          valueFrom:
+            secretKeyRef:
+              key: postgres-{{ $usr }}
+              name: {{ template "paymentindex.fullname" . }}
+        - name: CLINCARD_DB_URI
+          value: {{ printf "postgresql://%s:$(PORTALDB_PASS)@%s.%s/%s" $pusr $psvc .Release.Namespace $pdb }}
+        - name: DB_URI
+          value: {{ printf "postgresql://%s:$(DB_PASS)@%s.%s/%s" $usr $svc .Release.Namespace $db }}
+        - name: RABBIT_PASS
+          valueFrom:
+            secretKeyRef:
+              key: payments
+              name: rabbit-secret
+        - name: RABBITMQ_URI
+          value: {{ printf "amqp://%s:$(RABBIT_PASS)@%s.%s:5672/" $rmq_usr $rmq_svc .Release.Namespace }}
+        - name: RABBITMQ_EXCHANGE
+          value: payments
+        - name: CONFIG_FILE_PATH
+          value: /config/config.json
+        - name: RABBITMQ_QUEUE
+          value: paymentindex
+        - name: RABBITMQ_ROUTING_KEY
+          value: payments.*
+        - name: CLINCARD_EXCHANGE
+          value: clincard_core
+        - name: CLINCARD_ROUTING_KEY
+          value: clincard_core.*
+        - name: CLINCARD_QUEUE
+          value: paymentindex-clincard
+        - name: COUCH_URL
+          value: {{ printf "http://%s.%s:5984" $csvc .Release.Namespace }}
+        - name: COUCH_USER
+          value: {{ $cusr }}
+        - name: COUCH_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: password
+              name: couchdb-secret
+        - name: COUCH_DB
+          value: {{ $dbpis }}
+        - name: DECRYPTION_KEY
+          valueFrom:
+            secretKeyRef:
+              key: decryptionkey
+              name: {{ template "paymentindex.fullname" . }}
+        - name: LAZY_COUCH_VIEWS
+          value: "TRUE"
+        image: {{ .Values.image }}
+        imagePullPolicy: IfNotPresent
+        name: paymentindex-consumer
+        resources:
+          limits:
+            cpu: {{ .Values.resources.consumer.limits.cpu }}
+            memory: {{ .Values.resources.consumer.limits.memory }}
+          requests:
+            cpu: {{ .Values.resources.consumer.requests.cpu }}
+            memory: {{ .Values.resources.consumer.requests.memory }}
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /config
+          name: config
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext: {}
+      terminationGracePeriodSeconds: 30
+      volumes:
+      - configMap:
+          defaultMode: 420
+          items:
+          - key: config.json
+            path: config.json
+          name: paymentindex
+        name: config

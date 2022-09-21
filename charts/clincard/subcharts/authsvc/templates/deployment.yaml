@@ -1,0 +1,132 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "authsvc.fullname" . }}
+  labels: {{ include "authsvc.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels: {{ include "authsvc.selectorLabels" . | nindent 6 }}
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  progressDeadlineSeconds: {{ default 600 .Values.progressDeadlineSeconds }}
+  revisionHistoryLimit: {{ default 10 .Values.revisionHistoryLimit }}
+  {{- if .Values.rollingUpdateDeploymentStrategy.enabled }}
+  strategy: 
+    type: RollingUpdate
+    rollingUpdate: {{ include "authsvc.rollingUpdateDeploymentStrategy" . | nindent 6 }}
+  {{- end }}
+  template:
+    metadata:
+      labels: {{ include "authsvc.selectorLabels" . | nindent 8 }}        
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      containers:
+      - name: auth-svc # helm does not like dashes for variables, but the dash is referenced in our python files, so there will remain a dash here even though it is inconsistent
+        image: {{ .Values.image }}
+        imagePullPolicy: {{ default "IfNotPresent" .Values.imagePullPolicy }}
+        ports:
+        - containerPort: {{ default 8080 .containerPort }}
+          name: auth-svc # helm does not like dashes for variables, but the dash is referenced in our python files, so there will remain a dash here even though it is inconsistent
+          protocol: {{ default "TCP" .containerPortProtocol }}
+        args:
+        - -c
+        - pip install python-logstash git+https://github.com/Greenphire/jslog4kube.git
+          && auth-service -d
+        command:
+        - /bin/bash
+        env:
+        - name: DATABASE_PASS
+          valueFrom:
+            secretKeyRef:
+              key: postgres-{{ include "db_usr" . }}
+              name: {{ .Values.dependencies.clincardsecrets }}
+        - name: DB_URI
+          value: {{ printf "postgresql://%s:$(DATABASE_PASS)@%s.%s/%s" (include "db_usr" .) (include "db_svc" .) .Release.Namespace (include "db_db" .) }}
+        - name: CONFIG_FILE_PATH
+          value: /config/config.json
+        - name: MESSAGE_SERVICE_NAME
+          value: '{{ .Values.dependencies.messageservice }}.{{ .Release.Namespace }}'
+        - name: MESSAGE_SERVICE_PORT
+          value: '8080'
+        - name: JWT_SECRET
+          valueFrom:
+            secretKeyRef:
+              key: jwt-secret
+              name: {{ template "authsvc.fullname" . }}
+        - name: REDIS_HOST
+          value: redis
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: redis-password
+              name: {{ template "authsvc.fullname" . }}
+        {{- if .Values.authsvc }}
+        {{- if .Values.authsvc.jwtExpire }}
+        - name: JWT_EXPIRES_IN
+          value: {{ .Values.authsvc.jwtExpire | quote }}
+        {{- end }}
+        {{- if .Values.authsvc.jwtRedisTTL }}
+        - name: TEMPORARY_ACTIVE_TTL
+          value: {{ .Values.authsvc.jwtRedisTTL | quote }}
+        {{- end }}
+        {{- end }}
+        {{- with .Values.readinessProbe }}
+        readinessProbe:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with .Values.livenessProbe }}
+        livenessProbe:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        resources:
+          limits:
+            cpu: {{ default "256m" .Values.resourcesLimitsCpu }}
+            memory: {{ default "256Mi" .Values.resourcesLimitsMemory }}
+          requests:
+            cpu: {{ default "10m" .Values.resourcesRequestsCpu }}
+            memory: {{ default "64Mi" .Values.resourcesRequestsMemory }}
+        terminationMessagePath: {{ default "/dev/termination-log" .Values.containersTerminationMessagePath}}
+        terminationMessagePolicy: {{ default "File" .Values.containersTerminationMessagePolicy }}  
+        volumeMounts:
+        - mountPath: {{ default "/config" .Values.containersVolumeMountsMountPath}}
+          name: {{ default "config" .Values.containersVolumeMountsName}}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "authsvc.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.securityContext | nindent 8 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.dnsPolicy }}
+      dnsPolicy: {{ .Values.dnsPolicy }}
+      {{- end }}
+      {{- if .Values.restartPolicy }}
+      restartPolicy: {{ .Values.restartPolicy }}
+      {{- end }}
+      {{- if .Values.schedulerName }}
+      schedulerName: {{ .Values.schedulerName }}
+      {{- end }}
+      {{- if .Values.terminationGracePeriodSeconds }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      {{- end }}
+      {{- with .Values.volumes }}
+      volumes:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

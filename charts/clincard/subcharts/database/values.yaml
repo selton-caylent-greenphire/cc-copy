@@ -1,0 +1,22 @@
+name: database
+nameOverride: database
+fullnameOverride: database
+
+external: true
+
+# The below values can be overridden by parent chart global values. 
+# See clincard chart values.yaml file.
+db:
+  service: microservicedb-postgres
+  db_admin: clincard
+  host: <define-dbhost-release-values>
+
+portaldb: 
+  service: portaldb-postgres
+  db_admin: clincard
+  host: <define-dbhost-release-values>
+
+paymentdb:
+  service: paymentdb-postgres
+  db_admin: clincard
+  host: <define-dbhost-release-values>

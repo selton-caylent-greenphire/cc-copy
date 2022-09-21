@@ -1,0 +1,32 @@
+{{- if and .Values.internalIngress  .Values.internalIngress.enabled}}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "websocketssvc.internal.ingress" . }}
+  labels: {{ include "websocketssvc.internal.ingress.labels" . | nindent 4 }} 
+  annotations:
+    ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/affinity: cookie
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: 12m
+    nginx.ingress.kubernetes.io/session-cookie-hash: sha1
+    nginx.ingress.kubernetes.io/session-cookie-name: route
+spec:
+  ingressClassName: {{ default "internal" .Values.internalIngress.ingressClass }}
+  rules:
+  - host: {{ include "hosts_ws" . }}
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: {{ include "websocketssvc.fullname" . }}
+            port:
+              number: {{ default "5678" .Values.service.port }}
+  tls:
+  - secretName: {{ .Values.dependencies.tlssecret }}
+    hosts:
+    - {{ include "hosts_ws" . }}
+{{- end }}

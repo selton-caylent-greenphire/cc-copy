@@ -1,0 +1,62 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels: {{ include "taxablereport.labels" . | nindent 4 }}
+    tier: {{ .Values.service.tier }}
+  name: {{ template "taxablereport.fullname" . }}
+spec:
+  progressDeadlineSeconds: {{ default 600 .Values.service.progressDeadlineSeconds }}
+  replicas: {{ .Values.service.replicas }}
+  revisionHistoryLimit: {{ default 10 .Values.service.revisionHistoryLimit }}
+  selector:
+    matchLabels:
+      app: {{ template "taxablereport.fullname" . }}
+      tier: {{ .Values.service.tier }}
+  strategy:
+    rollingUpdate:
+      maxSurge: {{ .Values.service.rollingUpdate.maxSurge }}
+      maxUnavailable: {{ .Values.service.rollingUpdate.maxUnavailable }}
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: {{ template "taxablereport.fullname" . }}
+        tier: {{ .Values.service.tier }}
+    spec:
+      initContainers: {{ include (print .Template.BasePath "/_deployment_initcontainers.yaml.tpl") . | nindent 8 }}
+      containers:
+      - args:
+        - -c
+        - pip install python-logstash git+https://github.com/Greenphire/jslog4kube.git && taxablereport
+        command:
+        - /bin/bash
+        env:
+{{ include (print .Template.BasePath "/_commons_env.yaml.tpl" ) . |  indent 8 }}
+        image: {{ .Values.service.image }}
+        imagePullPolicy: IfNotPresent
+        name: taxablereport
+        {{- with .Values.service.readinessProbe }}
+        readinessProbe:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        ports:
+        - containerPort: 8080
+          name: taxablereport
+          protocol: TCP
+        resources:
+          limits:
+            cpu: "{{ .Values.service.resources.limits.cpu }}"
+            memory: "{{ .Values.service.resources.limits.memory }}"
+          requests:
+            cpu: "{{ .Values.service.resources.requests.cpu }}"
+            memory: "{{ .Values.service.resources.requests.memory }}"
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: {{ default "/config" .Values.containersVolumeMountsMountPath}}
+          name: {{ default "config" .Values.containersVolumeMountsName}}
+      {{- with .Values.volumes }}
+      volumes:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "taxablereport.serviceAccountName" . }}

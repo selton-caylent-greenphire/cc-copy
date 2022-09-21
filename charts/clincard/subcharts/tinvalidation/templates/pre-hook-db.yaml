@@ -1,0 +1,56 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ template "tinvalidation.fullname" . }}-pre-hook
+  labels: {{ include "tinvalidation.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: pre-install
+    helm.sh/hook-weight: "-1"
+    helm.sh/hook-delete-policy: before-hook-creation
+spec:
+  backoffLimit: 1
+  completions: 1
+  parallelism: 1
+  template:
+    metadata:
+      name: {{ template "tinvalidation.fullname" . }}}-pre-hook
+    spec:
+      restartPolicy: Never
+      initContainers:
+      - name: wait-for-postgres
+        image: {{ include "pgimage" . }}
+        command: ['sh', '-c', 'until pg_isready -h {{ include "db_svc" . }}.{{ .Release.Namespace }} -U {{ include "db_usr" . }} ; do echo waiting for database; sleep 2; done;']
+      containers:
+      - name: create-database-and-user
+        env:
+        - name: PGPASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: admin-microservicedb-{{ include "db_adm" . }}
+              name: {{ .Values.dependencies.postgresadmin }}-pre-hook
+        - name: PGSVCPASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: postgres-{{ include "db_usr" . }}
+              name: {{ .Values.dependencies.clincardsecrets }}-pre-hook
+        image: {{ include "pgimage" . }}
+        command: ["sh", "-c"]
+        args:
+          - |
+            psql -h {{ include "db_svc" . }}.{{ .Release.Namespace }} -U {{ include "db_adm" . }} -d postgres -v "ON_ERROR_STOP=1" << EOF &&
+            DO
+            \$\$
+            BEGIN
+              IF NOT EXISTS (
+                SELECT FROM pg_catalog.pg_roles
+                WHERE  rolname = '{{ include "db_usr" . }}')
+              THEN
+                CREATE ROLE {{ include "db_usr" . }} LOGIN PASSWORD '$(PGSVCPASSWORD)';
+                GRANT ALL ON DATABASE {{ include "db_db" . }} TO {{ include "db_usr" . }};
+                GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO {{ include "db_usr" . }};
+                GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO {{ include "db_usr" . }};
+              END IF;
+            END
+            \$\$;
+            EOF
+            echo "SELECT 'CREATE DATABASE {{ include "db_db" . }} WITH OWNER = {{ include "db_usr" . }}' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = '{{ include "db_db" . }}')\\gexec" | psql -h {{ include "db_svc" . }}.{{ .Release.Namespace }} -U {{ include "db_adm" . }} -d postgres

@@ -1,0 +1,14 @@
+apiVersion: v2
+name: milestonesvc
+description: Helm chart with the milestonesvc definition
+type: application
+version: 0.1.0
+appVersion: "1.0"
+maintainers:
+- name: Helene McElroy
+  email: helene.mcelroy@greenphire.com
+- name: Thuy Hoang
+  email: thuy.hoang@greenphire.com
+keywords:  
+  - milestonesvc
+  - external_apis

@@ -1,0 +1,53 @@
+{{- if .Values.runDupePaymentsCheck.enabled }}
+{{- $cronjob := .Values.runDupePaymentsCheck}}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ $cronjob.name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    component: {{ $cronjob.name }}
+{{ include "cronjobs.labels" . | indent 4 }}
+spec:
+  successfulJobsHistoryLimit: {{ default .Values.historyLimits.successfulJobsHistoryLimit $cronjob.successfulJobsHistoryLimit }}
+  failedJobsHistoryLimit: {{ default .Values.historyLimits.failedJobsHistoryLimit $cronjob.failedJobsHistoryLimit }}
+  concurrencyPolicy: {{ default .Values.concurrencyPolicy $cronjob.concurrencyPolicy }}  
+  schedule: {{ $cronjob.schedule | quote }}
+  suspend: {{ default .Values.suspend $cronjob.suspend }}
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: {{ default "task" $cronjob.containersName }}
+            image: {{ default .Values.image $cronjob.image}}
+            imagePullPolicy: {{ default .Values.imagePullPolicy $cronjob.imagePullPolicy}}
+            args: {{ toJson $cronjob.args }}
+            env:
+{{ include (print .Template.BasePath "/_commons_env.yaml.tpl" ) . |  indent 14 }}
+              - name: DUPECHECKER_NONBATCH_CLIENT_IDS
+                value: {{ $cronjob.client_ids | quote}}
+              - name: DUPE_CHECKER_EMAIL_RECIPIENTS
+                value: {{ $cronjob.recipients | quote}}
+              - name: DB_PASS
+                valueFrom:
+                  secretKeyRef:
+                    key: postgres-{{ include "db_usr" . }}
+                    name: {{ .Values.dependencies.paymentdomainsecrets}}
+              - name: DOMAIN_DB_URI
+                value: {{ printf "postgresql://%s:$(DB_PASS)@%s.%s/%s" (include "db_usr" .) (include "db_svc" .) .Release.Namespace $cronjob.database }}
+            resources:
+              limits:
+                cpu: {{ default .Values.resources.limits.cpu $cronjob.resourcesLimitsCpu }}
+                memory: {{ default .Values.resources.limits.memory $cronjob.resourcesLimitsMemory }}
+              requests:
+                cpu: {{ default .Values.resources.requests.cpu $cronjob.resourcesRequestsCpu }}
+                memory: {{ default .Values.resources.requests.memory $cronjob.resourcesRequestsMemory }}            
+          restartPolicy: {{ default .Values.restartPolicy $cronjob.restartPolicy}}
+          schedulerName: {{ default .Values.schedulerName $cronjob.schedulerName}}
+          {{- with $cronjob.securityContext }}
+          securityContext:
+          {{- toYaml . | nindent 12 }}
+          {{- end }}          
+{{- end }}

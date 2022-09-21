@@ -1,0 +1,120 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "eprosvc.fullname" . }}
+  labels: {{ include "eprosvc.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels: {{ include "eprosvc.selectorLabels" . | nindent 6 }}
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  progressDeadlineSeconds: {{ default 600 .Values.progressDeadlineSeconds  }}
+  revisionHistoryLimit: {{ default 10 .Values.revisionHistoryLimit  }}
+  {{- if .Values.rollingUpdateDeploymentStrategy.enabled }}
+  strategy: 
+    type: RollingUpdate
+    rollingUpdate: {{ include "eprosvc.rollingUpdateDeploymentStrategy" . | nindent 6 }}
+  {{- end }}
+  template:
+    metadata:
+      labels: {{ include "eprosvc.selectorLabels" . | nindent 8 }}        
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      initContainers:
+      - name: wait-for-portal
+        image: {{ include "pgimage" . }}
+        command: ['sh', '-c', 'until psql -d {{ include "portaldb_pdb" . }} -h {{ include "portaldb_psvc" . }}.{{ .Release.Namespace }} -U {{ include "portaldb_pusr" . }} -v ON_ERROR_STOP=1; do echo waiting for database; sleep 2; done;']
+        env: {{ include "opentelemetry_envs" . | nindent 8 -}}
+        - name: PGPASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: admin-portaldb-{{ include "portaldb_adm" . }}
+              name: postgres-admin
+      containers:
+      - name: {{ include "eprosvc.name" . }}
+        image: {{ .Values.image }}
+        imagePullPolicy: {{ default "IfNotPresent" .Values.imagePullPolicy }}
+        command: ["/bin/bash"]
+        args:
+          - "-c"
+          - "pip install python-logstash git+https://github.com/Greenphire/jslog4kube.git && epro-service -d"
+        ports:
+        - containerPort: {{ default 8080 .containerPort }}
+          name: {{ include "eprosvc.fullname" . }}    
+        env:
+        - name: DB_PASS
+          valueFrom:
+            secretKeyRef:
+              key: postgres-{{ include "portaldb_pusr" . }}
+              name: {{ template "eprosvc.fullname" . }}
+        - name: CLINCARD_DB_URI
+          value: {{ printf "postgresql://%s:$(DB_PASS)@%s.%s/%s" (include "portaldb_pusr" .) (include "portaldb_psvc" .) .Release.Namespace (include "portaldb_pdb" .) }}
+        - name: CONFIG_FILE_PATH
+          value: /config/config.json
+        - name: AUTH_BASE_URI
+          value: http://{{ .Values.dependencies.authsvc }}.{{ .Release.Namespace}}:8080
+        - name: PAYMENTSVC_URL
+          value: http://{{ .Values.dependencies.paymentevents}}.{{ .Release.Namespace}}:8080/swagger.json
+        - name: SERVICE_UUID
+          value: "66dbdaf0-2185-4a16-be50-b63f6816d8bb"
+        - name: SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.dependencies.authsvc }}
+              key: jwt-secret  
+        {{- with .Values.readinessProbe }}
+        readinessProbe:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with .Values.livenessProbe }}
+        livenessProbe:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        resources:
+          limits:
+            cpu: {{ default "256m" .Values.resourcesLimitsCpu }}
+            memory: {{ default "256Mi" .Values.resourcesLimitsMemory }}
+          requests:
+            cpu: {{ default "10m" .Values.resourcesRequestsCpu }}
+            memory: {{ default "64Mi" .Values.resourcesRequestsMemory }}
+        volumeMounts:
+        - mountPath: {{ default "/config" .Values.containersVolumeMountsMountPath}}
+          name: {{ default "config" .Values.containersVolumeMountsName}}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "eprosvc.serviceAccountName" . }}      
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.dnsPolicy }}
+      dnsPolicy: {{ .Values.dnsPolicy }}
+      {{- end }}
+      {{- if .Values.restartPolicy }}
+      restartPolicy: {{ .Values.restartPolicy }}
+      {{- end }}
+      {{- if .Values.schedulerName }}
+      schedulerName: {{ .Values.schedulerName }}
+      {{- end }}
+      {{- if .Values.terminationGracePeriodSeconds }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      {{- end }}
+      {{- with .Values.volumes }}
+      volumes:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

@@ -1,0 +1,64 @@
+{{- $csvc := get (include "couchdb" . | fromJson) "service" -}}
+{{- $dbpis := get (include "couchdb" . | fromJson) "db_pis" -}}
+{{- $dbpbdr := get (include "couchdb" . | fromJson) "db_pbdr" -}}
+{{- $cusr := get (include "couchdb" . | fromJson) "user" -}}
+{{- $cinit := get (include "couchdb" . | fromJson) "initdb" -}}
+{{- $cs3 := get (include "couchdb" . | fromJson) "init_bucket" -}}
+{{- if eq $cinit "true" }}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  labels:
+    app: {{ template "programbalancedetail.name" . }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    component: "{{ .Values.name }}"
+    heritage: {{ .Release.Service }}
+    release: {{ .Release.Name }}
+  name: {{ template "programbalancedetail.couchinit.fullname" . }}
+spec:
+  template:
+    metadata:
+      labels:
+        app: {{ template "programbalancedetail.name" . }}
+    spec:
+      restartPolicy: Never
+      containers:
+      - command: ["/bin/bash","-c"]
+        args:
+          - >-
+            apt-get -yq update && 
+            DEBIAN_FRONTEND=noninteractive apt-get -yq install jq awscli git curl &&
+            mkdir /clincard-config &&
+            mkdir /root/.ssh &&
+            cp /secrets/config-gitssh /root/.ssh/id_rsa &&
+            chmod 600 -R /root/.ssh/id_rsa &&
+            git clone git@github.com:Greenphire/clincard-config /clincard-config &&
+            chmod 755 /clincard-config/scripts/* &&
+            /clincard-config/scripts/cc-load-couchdb.sh
+        env:
+        - name: COUCH_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: password
+              name: couchdb-secret
+        - name: GIT_SSH_COMMAND
+          value: "ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no"
+        - name: COUCH_SVC
+          value: {{ $csvc }}
+        - name: S3_BUCKET
+          value: {{ $cs3 }}
+        - name: AWS_REGION
+          value: "us-east-1"
+        - name: INIT_DBS
+          value: "{{ $dbpbdr }}"
+        name: ubuntu
+        image: ubuntu:20.04
+        volumeMounts:
+        - mountPath: /secrets
+          name: secrets
+          readOnly: true
+      volumes:
+      - name: secrets
+        secret:
+          secretName: clincard
+{{- end }}

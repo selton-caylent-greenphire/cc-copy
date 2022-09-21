@@ -1,0 +1,11 @@
+{{ if .Values.configMaps }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "swaggerui.fullname" . }}-template
+  labels: {{ include "swaggerui.labels" . | nindent 4 }}
+data:
+  {{- range .Values.configMaps }}
+  {{ .dataKey }}: {{ include (print $.Template.BasePath .dataKeyTemplateSrc ) . | toYaml | indent 4 }}
+  {{- end }}
+{{- end }}

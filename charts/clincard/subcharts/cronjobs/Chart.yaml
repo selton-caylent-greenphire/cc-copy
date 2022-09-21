@@ -1,0 +1,19 @@
+apiVersion: v2
+name: cronjobs
+description: It is a Helm chart to manage multiple Kubernetes **CronJobs** that **use** the ***ClinCard base image***.
+type: application
+version: 1.4.1
+appVersion: "1.0.0"
+maintainers:
+- name: Helene McElroy
+  email: helene.mcelroy@greenphire.com
+- name: Jeisson Osorio
+  email: jeisson.osorio@greenphire.com
+keywords:
+  - cronjobs
+  - clincard
+  - payments
+  - i2c
+  - forex
+  - jira
+  - celery

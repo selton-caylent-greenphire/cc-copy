@@ -1,0 +1,69 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels: {{ include "dsreports.labels" . | nindent 4 }}
+    tier: {{ .Values.service.tier }}
+  name: {{ template "dsreports.fullname" . }}
+spec:
+  progressDeadlineSeconds: {{ default 600 .Values.service.progressDeadlineSeconds }}
+  replicas: {{ .Values.service.replicas }}
+  revisionHistoryLimit: {{ default 10 .Values.service.revisionHistoryLimit }}
+  selector:
+    matchLabels:
+      app: {{ template "dsreports.fullname" . }}
+      tier: {{ .Values.service.tier }}
+  strategy:
+    rollingUpdate:
+      maxSurge: {{ default "25%" .Values.service.rollingUpdate.maxSurge }}
+      maxUnavailable: {{ default "25%" .Values.service.rollingUpdate.maxUnavailable }}
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: {{ template "dsreports.fullname" . }}
+        tier: {{ .Values.service.tier }}
+    spec:
+      containers:
+      - args:
+        - -c
+        - pip install python-logstash git+https://github.com/Greenphire/jslog4kube.git && clincarddsreports
+        command:
+        - /bin/bash
+        env: {{ include (print .Template.BasePath "/_common_envs.yaml.tpl") . | nindent 8 -}}
+        - name: STUDYPAYMENTDETAIL_PORTAL_LIMIT
+          value: {{ .Values.studypaymentdetail_portal_limit | quote }}
+        - name: STUDYPAYMENTDETAIL_EMAIL_LIMIT
+          value: {{ .Values.studypaymentdetail_email_limit | quote }} 
+        image: {{ default .Values.image .Values.service.image }}
+        imagePullPolicy: IfNotPresent
+        name: {{ template "dsreports.fullname" . }}
+        {{- with .Values.service.readinessProbe }}
+        readinessProbe:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        ports:
+        - containerPort: 8080
+          name: {{ default "http" .Values.service.portName | quote }}
+          protocol: TCP
+        resources:
+          limits:
+            cpu: "{{ .Values.service.resources.limits.cpu }}"
+            memory: "{{ .Values.service.resources.limits.memory }}"
+          requests:
+            cpu: "{{ .Values.service.resources.requests.cpu }}"
+            memory: "{{ .Values.service.resources.requests.memory }}"
+        volumeMounts:
+        - mountPath: {{ default "/config" .Values.containersVolumeMountsMountPath}}
+          name: {{ default "config" .Values.containersVolumeMountsName}}
+{{- with .Values.service.hostAliases }}
+      hostAliases:
+{{- range . }}
+        - hostnames: {{ .names | toYaml | nindent 10 }}
+          ip: {{ .ip }}
+{{- end }}
+{{- end }}
+      {{- with .Values.volumes }}
+      volumes:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "dsreports.serviceAccountName" . }}

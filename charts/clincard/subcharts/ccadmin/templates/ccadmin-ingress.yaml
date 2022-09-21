@@ -1,0 +1,43 @@
+{{- if and .Values.ingressCcadmin  .Values.ingressCcadmin.enabled}}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  annotations:
+    nginx.ingress.kubernetes.io/cors-allow-methods: PUT, GET, POST, OPTIONS, PATCH
+    nginx.ingress.kubernetes.io/cors-allow-origin: "*.{{ include "hosts_domain" . }}"
+    nginx.ingress.kubernetes.io/enable-cors: {{ default "true" .Values.ingressCcadmin.enableCors | quote }}
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      more_set_headers "Content-Security-Policy: default-src https: wss: 'unsafe-inline' 'unsafe-eval'";
+      more_set_headers "Referrer-Policy: strict-origin-when-cross-origin";
+      more_set_headers "Permissions-Policy: accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=(), interest-cohort=()";
+  name: {{ include "ccadmin.fullname" . }}
+spec:
+  ingressClassName: {{ default "internal" .Values.ingressCcadmin.ingressClass }}
+  rules:
+  - host: {{ include "hosts_ccadmin" . }}
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: {{ include "ccadmin.fullname" . }}
+            port:
+              number: {{ .Values.service.port }}
+  - host: {{ include "hosts_ccalt" . }}
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: {{ include "ccadmin.fullname" . }}
+            port:
+              number: {{ .Values.service.port }}
+  tls:
+  - hosts:
+    - {{ include "hosts_ccadmin" . }}
+    - {{ include "hosts_ccalt" . }}
+    secretName: {{ .Values.dependencies.nginxcert }}
+{{- end }}

@@ -1,0 +1,58 @@
+name: paymentdomain
+nameOverride: paymentdomain
+fullnameOverride: paymentdomain
+tier: payments
+secretpath: lower
+
+images:
+  service: 160116585046.dkr.ecr.us-east-1.amazonaws.com/clincard/paymentdomain-service:1.8.0
+  consumer: 160116585046.dkr.ecr.us-east-1.amazonaws.com/clincard/paymentdomain-consumer:1.8.0
+
+resources:
+  service:
+    replicas: 2
+    limits:
+      cpu: 250m
+      memory: 256Mi
+    requests:
+      cpu: 10m
+      memory: 64Mi
+  consumer:
+    replicas: 2
+    limits:
+      cpu: 250m
+      memory: 256Mi
+    requests:
+      cpu: 125m
+      memory: 64Mi
+    autoscaling:
+      enabled: false
+      minReplicas: 2
+      maxReplicas: 25
+      rabbitmqMetricName: domain-queue-length
+      rabbitmqQueueName: domain
+      rabbitmqTargetValue: 1
+      rabbitmqUrlEnvVar: RABBITMQ_URI
+
+dependencies:
+  postgresadmin: postgres-admin
+  # -- Secrets dependency [clincard](https://github.com/Greenphire/clincard-config/tree/uat/charts/clincard)
+  clincardsecrets: clincard-secret
+
+gunicorn:
+  workers: 3
+
+# The below values can be overridden by parent chart global values. 
+# See clincard chart values.yaml file.
+postgres:
+  image: bitnami/postgresql:11.6.0-debian-9-r0
+
+db:
+  service: paymentdb-postgres
+  database: paymentdomain
+  username: paymentdomain
+  db_admin: clincard
+
+rabbit:
+  username: payments
+  service: rabbit-rabbitmq-ha

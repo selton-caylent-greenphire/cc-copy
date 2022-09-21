@@ -1,0 +1,130 @@
+apiVersion: v2
+appVersion: "1.0"
+description: A Helm chart deploying ClinCard
+name: clincard
+version: 0.17.10
+dependencies:
+- name: antivir
+  version: ">= 0.1.0"
+  repository: file://subcharts/antivir/
+  condition: antivir.enabled
+- name: authsvc
+  version: ">= 0.1.0"
+  repository: file://subcharts/authsvc
+  condition: authsvc.enabled
+- name: cardprocessorsandbox
+  version: ">= 0.1.0"
+  repository: file://subcharts/cardprocessorsandbox
+  condition: cardprocessorsandbox.enabled
+- name: ccadmin
+  version: ">= 0.1.0"
+  repository: file://subcharts/ccadmin
+  condition: ccadmin.enabled
+- name: configsvc
+  version: ">= 0.1.0"
+  repository: file://subcharts/configsvc
+  condition: configsvc.enabled
+- name: cronjobs
+  version: ">= 0.1.0"
+  repository: file://subcharts/cronjobs
+  condition: cronjobs.enabled
+- name: database
+  version: ">= 0.1.0"
+  repository: file://subcharts/database
+  condition: database.enabled
+- name: datasupport
+  version: ">= 0.1.0"
+  repository: file://subcharts/datasupport
+  condition: datasupport.enabled
+- name: ds-reports
+  version: ">= 0.1.0"
+  repository: file://subcharts/ds-reports
+  condition: ds-reports.enabled
+- name: ds-replicator
+  version: ">= 0.1.0"
+  repository: file://subcharts/ds-replicator
+  condition: ds-replicator.enabled
+- name: epro-svc
+  version: ">= 0.1.0"
+  repository: file://subcharts/epro-svc
+  condition: epro-svc.enabled
+- name: gravedigger
+  version: ">= 0.1.0"
+  repository: file://subcharts/gravedigger
+  condition: gravedigger.enabled
+- name: message-service
+  version: ">= 0.1.0"
+  repository: file://subcharts/message-service
+  condition: message-service.enabled
+- name: milestonesvc
+  version: ">= 0.1.0"
+  repository: file://subcharts/milestonesvc
+  condition: milestonesvc.enabled
+- name: paymentapprovals
+  version: ">= 0.1.0"
+  repository: file://subcharts/paymentapprovals
+  condition: paymentapprovals.enabled
+- name: paymentdomain
+  version: ">= 0.1.0"
+  repository: file://subcharts/paymentdomain
+  condition: paymentdomain.enabled
+- name: paymentevents
+  version: ">= 0.1.0"
+  repository: file://subcharts/paymentevents
+  condition: paymentevents.enabled
+- name: paymentgateway
+  version: ">= 0.1.0"
+  repository: file://subcharts/paymentgateway
+  condition: paymentgateway.enabled
+- name: paymentindex
+  version: ">= 0.1.0"
+  repository: file://subcharts/paymentindex
+  condition: paymentindex.enabled
+- name: paymentprocessor
+  version: ">= 0.1.0"
+  repository: file://subcharts/paymentprocessor
+  condition: paymentprocessor.enabled
+- name: programbalancedetail
+  version: ">= 0.1.0"
+  repository: file://subcharts/programbalancedetail
+  condition: programbalancedetail.enabled
+- name: rideshare
+  version: ">= 0.1.0"
+  repository: file://subcharts/rideshare
+  condition: rideshare.enabled
+- name: storage
+  version: ">= 0.1.0"
+  repository: file://subcharts/storage
+  condition: storage.enabled
+- name: study-svc
+  version: ">= 0.1.0"
+  repository: file://subcharts/study-svc
+  condition: study-svc.enabled
+- name: subject-svc
+  version: ">= 0.1.0"
+  repository: file://subcharts/subject-svc
+  condition: subject-svc.enabled
+- name: swagger-ui
+  version: ">= 0.1.0"
+  repository: file://subcharts/swagger-ui
+  condition: swagger-ui.enabled
+- name: taxablereport
+  version: ">= 0.1.0"
+  repository: file://subcharts/taxablereport
+  condition: taxablereport.enabled
+- name: tenninetynine
+  version: ">= 0.1.0"
+  repository: file://subcharts/tenninetynine
+  condition: tenninetynine.enabled
+- name: tinvalidation
+  version: ">= 0.1.0"
+  repository: file://subcharts/tinvalidation
+  condition: tinvalidation.enabled
+- name: websockets-svc
+  version: ">= 0.1.0"
+  repository: file://subcharts/websockets-svc
+  condition: websockets-svc.enabled
+- name: gloo-edge
+  version: ">= 0.1.0"
+  repository: file://subcharts/gloo
+  condition: gloo-edge.enabled

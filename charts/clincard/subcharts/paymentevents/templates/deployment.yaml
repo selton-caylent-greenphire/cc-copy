@@ -1,0 +1,119 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "paymentevents.fullname" . }}
+  labels: {{ include "paymentevents.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels: {{ include "paymentevents.selectorLabels" . | nindent 6 }}
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  progressDeadlineSeconds: {{ default 600 .Values.progressDeadlineSeconds }}
+  revisionHistoryLimit: {{ default 10 .Values.revisionHistoryLimit }}
+  {{- if .Values.rollingUpdateDeploymentStrategy.enabled }}
+  strategy: 
+    type: {{ default "RollingUpdate" .Values.deploymentStrategyType }}
+    rollingUpdate: {{ include "paymentevents.rollingUpdateDeploymentStrategy" . | nindent 6 }}
+  {{- end }}
+  template:
+    metadata:
+      labels: {{ include "paymentevents.selectorLabels" . | nindent 8 }}        
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- if .Values.initContainersSrc }}
+      initContainers:
+{{ include (print .Template.BasePath .Values.initContainersSrc ) . |  indent 8 }}
+      {{- end }}
+      containers:
+      - name: {{ include "paymentevents.fullname" . }}
+        image: {{ .Values.image }}
+        imagePullPolicy: {{ default "IfNotPresent" .Values.imagePullPolicy }}
+        command: ["/bin/bash"]  
+        args:
+        - -c
+        - pip install python-logstash git+https://github.com/Greenphire/jslog4kube.git && payment-service
+        ports:
+        - containerPort: {{ default 8080 .containerPort }}
+          name: {{ include "paymentevents.fullname" . }}
+          protocol: {{ default "TCP" .containerPortProtocol }}
+        env: {{ include "opentelemetry_envs" . | nindent 8 -}}
+        - name: DB_PASS
+          valueFrom:
+            secretKeyRef:
+              key: postgres-{{ include "paymentdb_usr" . }}
+              name: {{ .Values.dependencies.clincardsecrets }}
+        - name: RABBIT_PASS
+          valueFrom:
+            secretKeyRef:
+              key: {{ .Values.dependencies.rabbitmqSecrets }}
+              name: {{ template "paymentevents.fullname" . }}
+        - name: DB_URI
+          value: {{ printf "postgresql://%s:$(DB_PASS)@%s.%s/%s" (include "paymentdb_usr" .) (include "paymentdb_svc" .) .Release.Namespace (include "paymentdb_db" .) }}  
+        - name: RABBITMQ_URI
+          value: {{ printf "amqp://%s:$(RABBIT_PASS)@%s.%s:5672/" (include "rmq_usr" .) (include "rmq_svc" .) .Release.Namespace }}
+        - name: RABBITMQ_EXCHANGE
+          value: payments
+        - name: CONFIG_FILE_PATH
+          value: /config/config.json  
+        {{- with .Values.readinessProbe }}
+        readinessProbe:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with .Values.livenessProbe }}
+        livenessProbe:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        resources:
+          limits:
+            cpu: {{ default "256m" .Values.resourcesLimitsCpu }}
+            memory: {{ default "256Mi" .Values.resourcesLimitsMemory }}
+          requests:
+            cpu: {{ default "10m" .Values.resourcesRequestsCpu }}
+            memory: {{ default "64Mi" .Values.resourcesRequestsMemory }}
+        terminationMessagePath: {{ default "/dev/termination-log" .Values.containersTerminationMessagePath}}
+        terminationMessagePolicy: {{ default "File" .Values.containersTerminationMessagePolicy}}
+        volumeMounts:
+        - mountPath: {{ default "/config" .Values.containersVolumeMountsMountPath}}
+          name: {{ default "config" .Values.containersVolumeMountsName}}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "paymentevents.serviceAccountName" . }}
+      {{- with .Values.securityContext }}
+      securityContext:
+        {{- toYaml .Values.securityContext | nindent 8 }}
+      {{- end }} 
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.dnsPolicy }}
+      dnsPolicy: {{ .Values.dnsPolicy }}
+      {{- end }}
+      {{- if .Values.restartPolicy }}
+      restartPolicy: {{ .Values.restartPolicy }}
+      {{- end }}
+      {{- if .Values.schedulerName }}
+      schedulerName: {{ .Values.schedulerName }}
+      {{- end }}
+      {{- if .Values.terminationGracePeriodSeconds }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      {{- end }}
+      {{- with .Values.volumes }}
+      volumes:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

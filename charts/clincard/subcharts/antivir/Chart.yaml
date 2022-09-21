@@ -1,0 +1,14 @@
+apiVersion: v2
+name: antivir
+description: Helm chart with the antivir definition
+type: application
+version: 0.1.3
+appVersion: "1.0"
+maintainers:
+- name: Helene McElroy
+  email: helene.mcelroy@greenphire.com
+- name: Jeisson Osorio
+  email: jeisson.osorio@greenphire.com
+keywords:  
+  - virus-scanning
+  - clamav-server

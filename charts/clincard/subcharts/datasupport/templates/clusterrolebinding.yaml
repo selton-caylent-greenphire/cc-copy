@@ -1,0 +1,18 @@
+{{- if .Values.enabled }}
+{{- if ne .Release.Namespace "prod" }}
+---
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  labels: {{ include "datasupport.labels" . | nindent 4 }}
+  name: {{ template "datasupport.fullname" . }}
+subjects:
+- kind: ServiceAccount
+  name: {{ template "datasupport.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+roleRef:
+  kind: ClusterRole
+  name: {{ template "datasupport.fullname" . }}
+  apiGroup: rbac.authorization.k8s.io
+{{- end }}
+{{- end }}

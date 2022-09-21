@@ -1,0 +1,42 @@
+{{- if and .Values.clincardrqworker.autoscaling .Values.clincardrqworker.autoscaling.enabled }}
+{{- $deployment := .Values.clincardrqworker }}
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: {{ include "service.rqworker.fullname" . }}-redis-scaledobject
+  labels: {{ include "service.labels" . | nindent 4}}
+    tier: {{ default .Values.tier $deployment.tier }}
+spec:
+  scaleTargetRef: 
+    name: {{ include "service.rqworker.fullname" . }}
+  minReplicaCount: {{ default 2 $deployment.autoscaling.minReplicas }}
+  maxReplicaCount: {{ default 10 $deployment.autoscaling.maxReplicas }}
+  pollingInterval: {{ default 30 $deployment.autoscaling.pollingInterval }}
+  advanced:
+    horizontalPodAutoscalerConfig:
+      behavior:
+        scaleUp:
+          stabilizationWindowSeconds: 0
+          policies:
+          - type: Pods
+            value: {{ default 1 $deployment.autoscaling.podsPerScaling }}
+            periodSeconds: {{ default 60 $deployment.autoscaling.scalingUpInterval }}
+        scaleDown:
+          stabilizationWindowSeconds: 300
+          policies:
+          - type: Pods
+            value: {{ default 1 $deployment.autoscaling.podsPerScaling }}
+            periodSeconds: {{ default 60 $deployment.autoscaling.scalingDownInterval }}
+  triggers:
+  - type: redis
+    metricType: Value
+    metadata:
+      hostFromEnv: {{ default "REDIS_HOST" $deployment.autoscaling.redisUrlEnvVar }} # reads from target
+      passwordFromEnv: {{ default "REDIS_PASSWORD" $deployment.autoscaling.redisPasswordEnvVar }} # reads from target
+      port: {{ default "6379" $deployment.autoscaling.redisPort | quote }}
+      enableTLS: {{ default "false" $deployment.autoscaling.enableRedisTLS | quote }}
+      listName: {{ $deployment.autoscaling.redisListName }}
+      listLength: {{ $deployment.autoscaling.redisTargetValue | quote }}
+      databaseIndex: {{ default "0" $deployment.autoscaling.redisDBIndex | quote }}
+{{- end }}

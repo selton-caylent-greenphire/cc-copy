@@ -1,0 +1,17 @@
+{{- if .Values.service }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "paymentapprovals.fullname" . }}
+  labels: {{ include "paymentapprovals.labels" . | nindent 4 }}
+spec:
+  selector: {{ include "paymentapprovals.selectorLabels" . | nindent 4 }}   
+  ports:    
+    - name: {{ default "http" .Values.service.portName | quote }}
+      port: {{ default 8080 .Values.service.port }}
+      protocol: {{ default "TCP" .Values.service.protocol }}
+      targetPort: {{ default 8080 .Values.service.targetPort }}
+  sessionAffinity: {{ default "None" .Values.service.sessionAffinity }}
+  type: {{ default "ClusterIP" .Values.service.type }}
+{{- end }}

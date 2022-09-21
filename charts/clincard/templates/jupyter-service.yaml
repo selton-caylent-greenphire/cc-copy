@@ -1,0 +1,20 @@
+{{- if eq .Values.jupyter.enable true }}
+{{- if and .Values.jupyter.service .Values.jupyter.service.enabled }}
+{{- $deployment := .Values.jupyter }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ template "service.jupyter.fullname" . }}-ext
+  annotations:
+    service.beta.kubernetes.io/aws-load-balancer-internal: "true"
+spec:
+  ports:
+  - port: {{ default 8080 $deployment.service.port }}
+    targetPort: {{ default 8080 $deployment.service.targetPort }}
+  selector: {{ include "service.selectorLabels" . | nindent 4 }}
+    component: {{ template "service.jupyter.fullname" . }}
+    tier: {{ default .Values.tier $deployment.tier }}    
+  type: LoadBalancer
+{{- end }}
+{{- end }}

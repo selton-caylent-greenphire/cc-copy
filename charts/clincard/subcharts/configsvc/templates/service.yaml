@@ -1,0 +1,22 @@
+{{- if and .Values.service  .Values.service.enabled}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "configsvc.fullname" . }}
+  labels: {{ include "configsvc.labels" . | nindent 4 }}
+spec:
+  selector: {{ include "configsvc.selectorLabels" . | nindent 4 }}
+  clusterIP: {{ default "None" .Values.service.clusterIP }}   
+  ports:    
+    - name: {{ default "http" .Values.service.portName | quote }}
+      port: {{ default 8080 .Values.service.port }}
+      protocol: {{ default "TCP" .Values.service.protocol }} 
+      targetPort: {{ default 8080 .Values.service.targetPort }}  
+  sessionAffinity: {{ default "None" .Values.service.sessionAffinity }}
+  {{- if .Values.service.sessionAffinityConfig }}
+  sessionAffinityConfig:
+{{ toYaml .Values.service.sessionAffinityConfig | trim | indent 4 }}    
+  {{- end }}
+  type: {{ .Values.service.type }}
+{{- end }}

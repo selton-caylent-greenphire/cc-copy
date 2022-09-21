@@ -1,0 +1,11 @@
+{{ if .Values.rideshareCelery.configMapJson }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "rideshare.celery.fullname" . }}
+  labels: {{ include "rideshare.celery.labels" . | nindent 4 }} 
+data:
+  {{- range .Values.rideshareCelery.configMapJson }}
+  {{ .dataKey }}: {{ include (print $.Template.BasePath .dataKeyTemplateSrc ) . | toYaml | indent 4 }}
+  {{- end }}  
+{{- end }}

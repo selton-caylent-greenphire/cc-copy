@@ -1,0 +1,98 @@
+name: taxablereport
+nameOverride: taxablereport
+fullnameOverride: taxablereport
+tier: reports
+
+consumer:
+  tier: consumer
+  replicas: 2
+  image: 160116585046.dkr.ecr.us-east-1.amazonaws.com/clincard/taxablereport-consumer:1.0.7
+  revisionHistoryLimit: 10
+  progressDeadlineSeconds: 600
+  rollingUpdate:
+    maxSurge: 10%
+    maxUnavailable: 10%
+  resources:
+    limits:
+      cpu: 300m
+      memory: 150Mi
+    requests:
+      cpu: 100m
+      memory: 50Mi
+
+service:
+  tier: api
+  replicas: 2
+  image: 160116585046.dkr.ecr.us-east-1.amazonaws.com/clincard/taxablereport-service:1.0.7
+  revisionHistoryLimit: 10
+  progressDeadlineSeconds: 600
+  rollingUpdate:
+    maxSurge: 10%
+    maxUnavailable: 10%
+  resources:
+    limits:
+      cpu: 256m
+      memory: 300Mi
+    requests:
+      cpu: 75m
+      memory: 100Mi
+  readinessProbe:
+    failureThreshold: 3
+    httpGet:
+      path: /swagger.json
+      port: 8080
+      scheme: HTTP
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    successThreshold: 1
+    timeoutSeconds: 5
+
+dependencies:
+  configsvc: configsvc
+  paymentdomain: paymentdomain
+  paymentevents: paymentevents
+  paymentindex: paymentindex-consumer
+  # -- Secrets dependency [clincard](https://github.com/Greenphire/clincard-config/tree/uat/charts/clincard)
+  clincardsecrets: clincard-secret
+  # -- Secrets dependency [rabbit-secret](https://github.com/Greenphire/clincard-config/tree/uat/)
+  rabbitsecrets: rabbit-secret
+
+volumes:
+- configMap:
+    defaultMode: 420
+    items:
+    - key: config.json
+      path: config.json
+    name: taxablereport
+  name: config
+
+serviceAccount:
+  create: false
+  name: ""
+
+configMapJson:
+  - dataKey: config.json
+    dataKeyTemplateSrc: "/_configmap.json.tpl"
+    loggerServiceName: taxablereport
+    gunicornTimeout: 30
+
+# The below values can be overridden by parent chart global values.
+# See clincard chart values.yaml file.
+db:
+  service: paymentdb-postgres
+  database: taxablereports
+  username: taxablereports
+  db_admin: clincard
+
+portaldb:
+  service: portaldb-postgres
+  database: ccportaldatabase
+  username: taxablereports
+  db_admin: clincard
+
+postgres:
+  image: bitnami/postgresql:11.6.0-debian-9-r0
+
+rabbit:
+  username: payments
+  service: rabbit-rabbitmq-ha

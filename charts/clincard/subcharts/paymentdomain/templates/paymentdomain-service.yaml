@@ -1,0 +1,150 @@
+{{- $usr := get (include "db" . | fromJson) "username" -}}
+{{- $svc := get (include "db" . | fromJson) "service" -}}
+{{- $db := get (include "db" . | fromJson) "database" -}}
+{{- $rmq_usr := get (include "rabbit" . | fromJson) "username" }}
+{{- $rmq_svc := get (include "rabbit" . | fromJson) "service" }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: {{ template "paymentdomain.name" . }}
+    component: {{ template "paymentdomain.fullname" . }}
+    release: {{ .Release.Name }}
+    tier: {{ .Values.tier }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    heritage: {{ .Release.Service }}
+  name: {{ template "paymentdomain.fullname" . }}
+spec:
+  progressDeadlineSeconds: 600
+  replicas: {{ .Values.resources.service.replicas }}
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app: {{ template "paymentdomain.name" . }}
+      component: {{ template "paymentdomain.fullname" . }}
+      release: {{ .Release.Name }}
+      tier: {{ .Values.tier }}
+  strategy:
+    rollingUpdate:
+      maxSurge: 5 # TODO - make this a percentage instead of a hard number
+      maxUnavailable: 5 # TODO - make this a percentage instead of a hard number
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: {{ template "paymentdomain.name" . }}
+        component: {{ template "paymentdomain.fullname" . }}
+        release: {{ .Release.Name }}
+        tier: {{ .Values.tier }}
+    spec:
+      initContainers:
+      - name: wait-for-database
+        env: {{ include "opentelemetry_envs" . | nindent 8 -}}
+        - name: PGPASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: postgres-{{ $usr }}
+              name: {{ template "paymentdomain.fullname" . }}
+        image: {{ include "pgimage" . }}
+        command: ['sh', '-c', 'until pg_isready -h {{ $svc }}.{{ .Release.Namespace }} -U {{ $usr }} -d {{ $db }}; do echo waiting for database; sleep 2; done;']
+      containers:
+      - args:
+        - -c
+        - pip install python-logstash git+https://github.com/Greenphire/jslog4kube.git
+          && payment-domain-service
+        command:
+        - /bin/bash
+        env:
+        - name: CONFIG_FILE_PATH
+          value: /config/config.json
+        - name: DB_PASS
+          valueFrom:
+            secretKeyRef:
+              key: postgres-{{ $usr }}
+              name: {{ template "paymentdomain.fullname" . }}
+        - name: DB_URI
+          value: {{ printf "postgresql://%s:$(DB_PASS)@%s.%s/%s" $usr $svc .Release.Namespace $db }}
+        - name: RABBITMQ_DLX
+          value: payments-dlx
+        - name: RABBITMQ_EXCHANGE
+          value: payments
+        - name: RABBITMQ_QUEUE
+          value: domain
+        - name: RABBITMQ_RETRIES
+          value: "5"
+        - name: RABBITMQ_ROUTING_KEY
+          value: payments.*
+        - name: RABBIT_PASS
+          valueFrom:
+            secretKeyRef:
+              key: payments
+              name: rabbit-secret
+        - name: RABBITMQ_URI
+          value: {{ printf "amqp://%s:$(RABBIT_PASS)@%s.%s:5672/" $rmq_usr $rmq_svc .Release.Namespace }}
+        image: {{ .Values.images.service }}
+        imagePullPolicy: IfNotPresent
+        name: {{ template "paymentdomain.name" . }}
+        ports:
+        - containerPort: 8080
+          name: paymentdomain
+          protocol: TCP
+        readinessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /swagger.json
+            port: 8080
+            scheme: HTTP
+          initialDelaySeconds: 20
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 3
+        resources:
+          limits:
+            cpu: {{ .Values.resources.service.limits.cpu }}
+            memory: {{ .Values.resources.service.limits.memory }}
+          requests:
+            cpu: {{ .Values.resources.service.requests.cpu }}
+            memory: {{ .Values.resources.service.requests.memory }}
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /config
+          name: config
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext: {}
+      terminationGracePeriodSeconds: 30
+      volumes:
+      - configMap:
+          defaultMode: 420
+          items:
+          - key: config.json
+            path: config.json
+          name: paymentdomain
+        name: config
+status: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: {{ template "paymentdomain.name" . }}
+    component: {{ template "paymentdomain.fullname" . }}
+    release: {{ .Release.Name }}
+    tier: {{ .Values.tier }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    heritage: {{ .Release.Service }}
+  name: {{ template "paymentdomain.fullname" . }}
+spec:
+  ports:
+  - port: 8080
+    protocol: TCP
+    targetPort: 8080
+  selector:
+    app: {{ template "paymentdomain.name" . }}
+    component: {{ template "paymentdomain.fullname" . }}
+    release: {{ .Release.Name }}
+    tier: {{ .Values.tier }}
+  sessionAffinity: None
+  type: ClusterIP

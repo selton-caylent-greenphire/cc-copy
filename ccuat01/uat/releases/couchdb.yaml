@@ -1,0 +1,81 @@
+---
+apiVersion: helm.toolkit.fluxcd.io/v2beta1
+kind: HelmRelease
+metadata:
+  name: couchdb-ha
+  namespace: uat
+spec:
+  interval: 5m
+  chart:
+    spec:
+      chart: charts/couchdb
+      reconcileStrategy: Revision
+      sourceRef:
+        kind: GitRepository
+        name: clincard-uat
+        namespace: flux-system
+  valuesFrom:
+    - kind: Secret
+      name: couchdb-secrets
+      valuesKey: SecureString
+  values:
+    image:
+      repository: couchdb
+      tag: 2.2.0
+    helperImage:
+      repository: kocolosk/couchdb-statefulset-assembler
+      tag: 1.1.0
+      pullPolicy: IfNotPresent
+    ingress:
+      enabled: true
+    clusterSize: 2
+    createAdminSecret: true
+    adminUsername: admin
+    persistentVolume:
+      enabled: true
+      accessModes:
+        - ReadWriteOnce
+      size: 1000Gi
+      storageClass: "gp2-encrypted"
+    affinity:
+      nodeAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+          - preference:
+              matchExpressions:
+                - key: nodetype
+                  operator: In
+                  values:
+                    - compute
+            weight: 1
+      podAntiAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+                - key: "app"
+                  operator: In
+                  values:
+                  - couchdb
+                - key: "release"
+                  operator: In
+                  values:
+                  - couchdb-ha
+            topologyKey: "kubernetes.io/hostname"
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 4
+        memory: 8Gi
+    couchdbConfig:
+      query_server_config:
+        os_process_limit: 1000
+      couchdb:
+        max_dbs_open: 5000
+      # Override default DB/VIEW compaction settings.
+      # Time window is set because Clincard Couchdb backups run at 3am UTC and run roughly 2 hours.
+      # Time window set below avoids running DB/VIEW compaction during the backup time window.
+      compactions:
+        _default: '[{db_fragmentation, "70%"}, {view_fragmentation, "60%"}, {from, "06:00"}, {to, "10:00"}]'
+    service:
+      enabled: true

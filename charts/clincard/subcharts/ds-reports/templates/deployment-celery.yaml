@@ -1,0 +1,57 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels: {{ include "dsreports.labels" . | nindent 4 }}
+    tier: {{ .Values.dscelery.tier }}
+  name: {{ template "dsreports.fullname" . }}-celery
+spec:
+  progressDeadlineSeconds: {{ default 600 .Values.dscelery.progressDeadlineSeconds }}
+  replicas: {{ .Values.dscelery.replicas }}
+  revisionHistoryLimit: {{ default 10 .Values.dscelery.revisionHistoryLimit }}
+  selector:
+    matchLabels:
+      app: {{ template "dsreports.fullname" . }}-celery
+      tier: {{ .Values.dscelery.tier }}
+  strategy:
+    rollingUpdate:
+      maxSurge: {{ default "25%" .Values.dscelery.rollingUpdate.maxSurge }}
+      maxUnavailable: {{ default "25%" .Values.dscelery.rollingUpdate.maxUnavailable }}
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: {{ template "dsreports.fullname" . }}-celery
+        tier: {{ .Values.dscelery.tier }}
+    spec:
+      containers:
+      - args:
+        - -c
+        -  pip install python-logstash git+https://github.com/Greenphire/jslog4kube.git && clincarddsreports-consumer
+        command:
+        - /bin/bash
+        env: {{ include (print .Template.BasePath "/_common_envs.yaml.tpl") . | nindent 8 -}}
+        image: {{ default .Values.image .Values.dscelery.image }}
+        imagePullPolicy: IfNotPresent
+        name: {{ template "dsreports.fullname" . }}-celery-worker
+        resources:
+          limits:
+            cpu: {{ .Values.dscelery.resources.limits.cpu | quote }}
+            memory: {{ .Values.dscelery.resources.limits.memory | quote }}
+          requests:
+            cpu: {{ .Values.dscelery.resources.requests.cpu | quote }}
+            memory: {{ .Values.dscelery.resources.requests.memory | quote }}
+        volumeMounts:
+        - mountPath: {{ default "/config" .Values.containersVolumeMountsMountPath}}
+          name: {{ default "config" .Values.containersVolumeMountsName}}
+{{- with .Values.dscelery.hostAliases }}
+      hostAliases:
+{{- range . }}
+        - hostnames: {{ .names | toYaml | nindent 10 }}
+          ip: {{ .ip }}
+{{- end }}
+{{- end }}
+      {{- with .Values.volumes }}
+      volumes:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "dsreports.serviceAccountName" . }}

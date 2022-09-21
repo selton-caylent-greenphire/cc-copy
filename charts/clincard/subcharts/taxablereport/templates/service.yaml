@@ -1,0 +1,16 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels: {{ include "taxablereport.labels" . | nindent 4 }}
+  name: {{ template "taxablereport.fullname" . }}
+spec:
+  ports:
+  - port: 8080
+    protocol: TCP
+    targetPort: 8080
+  selector:
+    app: {{ template "taxablereport.fullname" . }}
+    tier: {{ .Values.service.tier }}
+  sessionAffinity: None
+  type: ClusterIP

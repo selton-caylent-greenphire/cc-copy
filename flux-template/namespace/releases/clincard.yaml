@@ -1,0 +1,252 @@
+---
+apiVersion: helm.fluxcd.io/v1
+kind: HelmRelease
+metadata:
+  name: clincard
+  namespace: ##namespace##
+  annotations:
+    fluxcd.io/automated: "true"
+spec:
+  releaseName: clincard
+  chart:
+    git: git@github.com:/Greenphire/clincard-config
+    path: charts/clincard
+    ref: ## environment branch ##
+  values:
+    global:
+      hosts:
+        domain: clincard.com
+        clincard: instance.clincard.com
+        static: static-##instance##.clincard.com
+        jupyter: jupyter-##instance##.clincard.com
+        ws: ws-##instance##.clincard.com
+        datasupport: datasupport-##instance##.clincard.com
+        apiinternal: api-internal-##instance##.clincard.com
+        api: api-admin-##instance##.clincard.com
+        ccadmin: cc-##instance##.clincard.com
+        ccalt: ccadmin-##instance##.clincard.com
+      postgres:
+        image: bitnami/postgresql:11.6.0-debian-9-r0
+      db:
+        service: microservicedb-postgres
+        db_admin: clincard
+        ip: ##Database IP##
+      portaldb:
+        service: portaldb-postgres
+        database: ccportaldatabase
+        db_admin: clincard
+        ip: ##Database IP##
+      paymentdb:
+        db_admin: clincard
+        ip: ##Database IP##
+      rabbit:
+        username: payments
+        service: rabbit-rabbitmq-ha
+      celery:
+        enable: true
+        username: celery
+        service: rabbit-rabbitmq-ha
+      couchdb:
+        user: admin
+        service: couchdb-ha-svc-couchdb
+        db_configs: configs
+        db_flexpayopts: flexible_payment_options
+        db_payment: paymentcfg
+        db_taxmanagement: taxmgt
+        db_pis: paymentindex
+        db_pbdr: pbdr
+    # Subcharts / Microservices
+    antivir:
+      enabled: true
+      image: 160116585046.dkr.ecr.us-west-2.amazonaws.com/virusscanning:##tag e.g. 1.1.0#
+    authsvc:
+      enabled: true
+      image: 160116585046.dkr.ecr.us-west-2.amazonaws.com/auth-service:##tag e.g. 1.0.9#
+      redistest: "604800"
+    cardprocessorsandbox:
+      enabled: true
+      image: 160116585046.dkr.ecr.us-east-1.amazonaws.com/clincard/cardprocessorsandbox:##tag e.g. dev##
+    ccadmin:
+      enabled: true
+      image: 160116585046.dkr.ecr.us-east-1.amazonaws.com/clincard/ccadmin:##tag 4.4.0##
+    configsvc:
+      enabled: true
+      image: 160116585046.dkr.ecr.us-west-2.amazonaws.com/config-svc:##tag e.g. 1.1.1##
+    database:
+      enabled: true
+      external: true
+    gravedigger:
+      enabled: true
+      images:
+        service: 160116585046.dkr.ecr.us-west-2.amazonaws.com/gravedigger-service:##tag e.g. 1.1.6##
+        consumer: 160116585046.dkr.ecr.us-west-2.amazonaws.com/gravedigger-consumer:##tag e.g. 1.1.6##
+    paymentapprovals:
+      enabled: true
+      images:
+        service: 160116585046.dkr.ecr.us-west-2.amazonaws.com/paymentapproval-service:##tag e.g. 1.4.0##
+        consumer: 160116585046.dkr.ecr.us-west-2.amazonaws.com/paymentapproval-consumer:##tag e.g. 1.2.8##
+    paymentdomain:
+      enabled: true
+#      secretpath: ##instance##
+#      images:
+#        service: 160116585046.dkr.ecr.us-east-1.amazonaws.com/clincard/paymentdomain-service:##tag e.g. 1.4.0##
+#        consumer: 160116585046.dkr.ecr.us-east-1.amazonaws.com/clincard/paymentdomain-consumer:##tag e.g. 1.4.0##
+#      resources:
+#        service:
+#          replicas: ##instance##
+#          limits:
+#            cpu: ##instance##
+#            memory: ##instance##
+#          requests:
+#            cpu: ##instance##
+#            memory: ##instance##
+#        consumer:
+#          replicas: ##instance##
+#          limits:
+#            cpu: ##instance##
+#            memory: ##instance##
+#          requests:
+#            cpu: ##instance##
+#            memory: ##instance##
+    paymentevents:
+      enabled: true
+      image: 160116585046.dkr.ecr.us-west-2.amazonaws.com/paymentevents:##tag e.g. 1.5.2##
+    paymentgateway:
+      enabled: true
+      image: 160116585046.dkr.ecr.us-east-1.amazonaws.com/clincard/paymentgateway-service:##tag e.g. 1.0.38##
+    paymentindex:
+      enabled: true
+#      image: 160116585046.dkr.ecr.us-west-2.amazonaws.com/paymentindex-consumer:##tag e.g. 1.0.7##
+#      secretpath: ##instance##
+#      resources:
+#        consumer:
+#          replicas: ##instance##
+#          limits:
+#            cpu: ##instance##
+#            memory: ##instance##
+#          requests:
+#            cpu: ##instance##
+#            memory: ##instance##
+    paymentprocessor:
+      enabled: true
+      image: 160116585046.dkr.ecr.us-west-2.amazonaws.com/paymentprocessor:##tag e.g. 2.0.2##
+    programbalancedetail:
+      enabled: true
+      dependencies:
+        ridesharesvc: rideshare-svc # This is used to build the Deployment Variable for Rideshare Swagger
+#      images:
+#        service: 160116585046.dkr.ecr.us-west-2.amazonaws.com/programbalancedetail:##tag e.g. 1.2.1##
+#        consumer: 160116585046.dkr.ecr.us-west-2.amazonaws.com/programbalancedetail-consumer:##tag e.g. 1.2.1##
+#      secretpath: ##instance##
+#      gunicorn:
+#        workers: ##instance##
+#      resources:
+#        service:
+#          replicas: ##instance##
+#          limits:
+#            cpu: ##instance##
+#            memory: ##instance##
+#          requests:
+#            cpu: ##instance##
+#            memory: ##instance##
+#        consumer:
+#          replicas: ##instance##
+#          limits:
+#            cpu: ##instance##
+#            memory: ##instance##
+#          requests:
+#            cpu: ##instance##
+#            memory: ##instance##
+#      mailer:
+#        enabled: false
+#        email_host: "HOST""
+#        email_user: ''
+#        email_port: "25"
+#        use_tls: "0"
+#        no_login: "True"
+#        upload_host: "HOST"
+#        upload_path: "/home/media/greenphire_media/reports/"
+#        upload_user: "media"
+#        url_base: "https://ccdevmedia01.corp.greenphire.net:8443/reports"
+#        xls_tmp_dir: "/tmp"
+#        hostAliases:
+#          - ip: "10.75.12.73"
+#            hostnames:
+#              - "ccdevmedia01.corp.greenphire.net"
+#        resources:
+#          limits:
+#            cpu: 500m
+#            memory: 2Gi
+#          requests:
+#            cpu: 50m
+#            memory: 256Mi
+
+    rideshare:
+      enabled: true
+      images:
+        service: 160116585046.dkr.ecr.us-west-2.amazonaws.com/rideshare-service:##tag e.g. 2.5.1##
+        celery: 160116585046.dkr.ecr.us-west-2.amazonaws.com/rideshare-celery:##tag e.g. 2.5.1##
+        consumer: 160116585046.dkr.ecr.us-west-2.amazonaws.com/rideshare-consumer:##tag e.g. 2.5.1##
+    study-svc:
+      enabled: true
+      image: 160116585046.dkr.ecr.us-west-2.amazonaws.com/study-service:##tag e.g. 1.1.1##
+    subject-svc:
+      enabled: true
+      image: 160116585046.dkr.ecr.us-west-2.amazonaws.com/subject-service:##tag e.g. 1.0.13##
+    swagger-ui:
+      enabled: false
+    taxablereport:
+      enabled: true
+      images:
+        service: 160116585046.dkr.ecr.us-east-1.amazonaws.com/clincard/taxablereport-service:##tag##
+        consumer: 160116585046.dkr.ecr.us-east-1.amazonaws.com/clincard/taxablereport-consumer:##tag##
+    tenninetynine:
+      enabled: true
+#      image: 160116585046.dkr.ecr.us-west-2.amazonaws.com/tenninetynine:##tag e.g. 1.0.3##
+#      secretpath: ##instance##
+#      ingress:
+#        enabled: false
+#        port: ##instance## - Ex: 8080
+#        path: ##instance## - Ex: /ten99
+#      gunicorn:
+#        workers: ##instance##
+#      resources:
+#        service:
+#          replicas: ##instance##
+#          limits:
+#            cpu: ##instance##
+#            memory: ##instance##
+#          requests:
+#            cpu: ##instance##
+#            memory: ##instance##
+    tinvalidation:
+      real_validation: false
+      enabled: true
+      image: 160116585046.dkr.ecr.us-west-2.amazonaws.com/tinvalidation:##tag e.g. 1.0.2##
+    websockets-svc:
+      enabled: true
+      image: 160116585046.dkr.ecr.us-west-2.amazonaws.com/websockets:##tag e.g. 1.0.0##
+    # Clincard Template
+    jupyter:
+      enable: true
+    clincardrqworker:
+      enable: true    
+    clincardstatic:
+      enable: true
+    clincardlegacy:
+      enable: true
+    clincardclincard:
+      enable: true
+    clincardsecrets:
+      enable: true
+    images:
+      default: 160116585046.dkr.ecr.us-east-1.amazonaws.com/clincard/clincard:app-##tag##
+      static: 160116585046.dkr.ecr.us-east-1.amazonaws.com/clincard/clincard:static-files-##tag##
+      task: 160116585046.dkr.ecr.us-east-1.amazonaws.com/clincard/clincard:task-##tag##
+      celerybp: 160116585046.dkr.ecr.us-east-1.amazonaws.com/clincard/clincard:task-##tag##
+      rqworker: 160116585046.dkr.ecr.us-east-1.amazonaws.com/clincard/clincard:rqworker-##tag##
+    cronjobs:
+      batch_processor_sftp:
+        enabled: false
+        suspend: false
+        secretpath: lower

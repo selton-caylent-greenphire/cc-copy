@@ -1,0 +1,89 @@
+name: message-service
+nameOverride: message-service
+fullnameOverride: message-service
+
+max_retries: 5
+retry_countdown: 60
+liquidfiles_url: "https://files.greenphire.com"
+
+service:
+  image: 160116585046.dkr.ecr.us-east-1.amazonaws.com/greenphire/message-service:1.3.3
+  tier: api
+  replicas: 2
+  revisionHistoryLimit: 10
+  progressDeadlineSeconds: 600
+  rollingUpdate:
+    maxSurge: 25%
+    maxUnavailable: 25%
+  resources:
+    limits:
+      cpu: 500m
+      memory: 256Mi
+    requests:
+      cpu: 10m
+      memory: 64Mi
+  readinessProbe:
+    failureThreshold: 3
+    httpGet:
+      path: /swagger.json
+      port: 8080
+      scheme: HTTP
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    successThreshold: 1
+    timeoutSeconds: 5
+
+messagecelery:
+  image: 160116585046.dkr.ecr.us-east-1.amazonaws.com/greenphire/message-service:celery-1.3.3
+  tier: backend
+  replicas: 2
+  revisionHistoryLimit: 10
+  progressDeadlineSeconds: 600
+  rollingUpdate:
+    maxSurge: 25%
+    maxUnavailable: 25%
+  resources:
+    limits:
+      cpu: 512m
+      memory: 1Gi
+    requests:
+      cpu: 10m
+      memory: 64Mi
+
+dependencies:
+  # -- Secrets dependency [clincard](https://github.com/Greenphire/clincard-config/tree/uat/charts/clincard)
+  clincardsecrets: clincard-secret
+
+volumes:
+- configMap:
+    defaultMode: 420
+    items:
+    - key: config.json
+      path: config.json
+    name: message-service
+  name: config
+
+serviceAccount:
+  create: false
+  name: ""
+
+configMapJson:
+  - dataKey: config.json
+    dataKeyTemplateSrc: "/_configmap.json.tpl"
+    loggerServiceName: message-service
+    loggerServiceLevel: DEBUG
+    loggerRootLevel: DEBUG
+
+commonEnv:
+  emailHost: "10.75.23.123"
+  emailHostUser: "apikey"
+  emailNoLogin: "1"
+  emailPort: "25"
+  emailUseTls: "0"
+
+# The below values can be overridden by parent chart global values.
+# See clincard chart values.yaml file.
+
+celery:
+  username: celery
+  service: rabbit-rabbitmq-ha

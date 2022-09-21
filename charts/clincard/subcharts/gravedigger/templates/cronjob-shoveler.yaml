@@ -1,0 +1,45 @@
+{{- if eq .Values.shoveler.enable true }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  labels: {{ include "gravedigger.labels" . | nindent 4 }}
+  name: {{ template "gravedigger.shoveler.fullname" . }}
+spec:
+  concurrencyPolicy: {{ .Values.shoveler.concurrencyPolicy }}
+  failedJobsHistoryLimit: {{ .Values.shoveler.failedJobsHistoryLimit }}
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - args:
+            - -c
+            - 'curl -X POST -H ''Content-Type: application/json''
+              $GRAVE_DIGGER_URL/$EXCHANGE/$QUEUE/shovel -d ''{"exception_type": "other"}'''
+            command:
+            - /bin/sh
+            env:
+            - name: GRAVE_DIGGER_URL
+              value: http://{{ template "gravedigger.name" . }}.{{ .Release.Namespace }}:8080
+            - name: EXCHANGE
+              value: payments
+            - name: QUEUE
+              value: payment_processing
+            image: alpine/curl
+            imagePullPolicy: Always
+            name: task
+            resources:
+              requests:
+                cpu: {{ .Values.shoveler.resources.requests.cpu }}
+                memory: {{ .Values.shoveler.resources.requests.memory }}
+            terminationMessagePath: /dev/termination-log
+            terminationMessagePolicy: File
+          dnsPolicy: ClusterFirst
+          restartPolicy: OnFailure
+          schedulerName: default-scheduler
+          securityContext: {}
+          terminationGracePeriodSeconds: 30
+  schedule: {{ .Values.shoveler.schedule | quote}}
+  successfulJobsHistoryLimit: {{ .Values.shoveler.successfulJobsHistoryLimit }}
+  suspend: false
+{{- end }}

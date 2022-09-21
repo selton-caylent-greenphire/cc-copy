@@ -1,0 +1,82 @@
+{{- if eq .Values.clincardlegacy.enable true }}
+{{- $deployment := .Values.clincardlegacy }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels: {{ include "service.labels" . | nindent 4 }}
+    component: {{ template "service.legacy.fullname" . }}
+    tier: {{ default "base" .Values.tier }}
+  name: {{ template "service.legacy.fullname" . }}
+spec:
+  progressDeadlineSeconds: {{ default 600 $deployment.progressDeadlineSeconds}}
+  replicas: {{ default 1 $deployment.replicas }}
+  revisionHistoryLimit: {{ default 10 $deployment.revisionHistoryLimit }}
+  selector:
+    matchLabels: {{ include "service.selectorLabels" . | nindent 6 }}
+      component: {{ template "service.legacy.fullname" . }}
+      tier: {{ default "base" .Values.tier }}
+  strategy:
+    rollingUpdate:
+      maxSurge: {{ default "50%" $deployment.strategyMaxSurge }}
+      maxUnavailable: {{ default "20%" $deployment.strategyMaxUnavailable }}
+    type: {{ default "RollingUpdate" $deployment.strategyType }}
+  template:
+    metadata:
+      labels: {{ include "service.selectorLabels" . | nindent 8 }}
+        component: {{ template "service.legacy.fullname" . }}
+        tier: {{ default "base" .Values.tier }}
+    spec:
+      initContainers: {{ include (print .Template.BasePath "/_deployment_initcontainers.yaml.tpl") . | nindent 6 }}      
+      containers:
+      - args:
+        - python
+        - /clincard/scripts/backfill_payments.py
+        - -t
+        - PaymentRequested
+        - PaymentVoided
+        - PaymentApproved
+        - PaymentSkipped
+        - PaymentReleased
+        - PaymentDeclined
+        - AttributeAdded
+        - PaymentCompleted
+        - PaymentMarkedPending
+        - ForexSettled
+        env:
+{{ include (print .Template.BasePath "/_common_db_env.yaml.tpl"  ) . |  indent 8 }}
+{{ include (print .Template.BasePath "/_common_rmq_env.yaml.tpl" ) . |  indent 8 }}
+{{ include (print .Template.BasePath "/_common_svc_env.yaml.tpl" ) . |  indent 8 }}
+{{ include (print .Template.BasePath "/_common_task_envs.yaml.tpl" ) . |  indent 8 }}
+{{- range $key, $value := $deployment.customEnv }}
+        - name: {{ $key }}
+          value: {{ $value | quote }}
+{{- end }}        
+        image: {{ .Values.images.task }}
+        imagePullPolicy: {{ default "IfNotPresent" $deployment.imagePullPolicy }}
+        name: {{ default "legacy-backfill" $deployment.containerName }}
+        resources:
+          limits:
+            cpu: {{ default "125m" $deployment.resourcesLimitsCpu }}
+            memory: {{ default "256Mi" $deployment.resourcesLimitsMemory }}
+          requests:
+            cpu: {{ default "10m" $deployment.resourcesRequestsCpu }}
+            memory: {{ default "64Mi" $deployment.resourcesRequestsMemory }}         
+        terminationMessagePath: {{ default "/dev/termination-log" $deployment.terminationMessagePath }}
+        terminationMessagePolicy: {{ default "File" $deployment.terminationMessagePolicy }}        
+      dnsPolicy: {{ default "ClusterFirst" $deployment.dnsPolicy }}      
+      {{- with $deployment.hostAliases }}
+      hostAliases:
+      {{- range . }}
+      - hostnames: {{ .names | toYaml | nindent 8 }}
+        ip: {{ .ip }}
+      {{- end }}
+      {{- end }}
+      restartPolicy: {{ default "Always" $deployment.restartPolicy }}
+      schedulerName: {{ default "default-scheduler" $deployment.schedulerName }}
+      {{- with $deployment.securityContext }}
+      securityContext:
+      {{- toYaml . | nindent 8 }}
+      {{- end }}
+      terminationGracePeriodSeconds: {{ default 30 $deployment.terminationGracePeriodSeconds }}    
+{{- end }}

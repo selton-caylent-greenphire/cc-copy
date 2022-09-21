@@ -1,0 +1,75 @@
+{{- if .Values.cronjobs.automatedSync.enabled }}
+{{- $cronjob := .Values.cronjobs.automatedSync}}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: clincard-automatedsync
+  namespace: {{ .Release.Namespace }}
+  labels:
+    component: clincard-automatedsync
+{{ include "service.labels" . | indent 4 }}
+spec:
+  successfulJobsHistoryLimit: {{ default 1 $cronjob.successfulJobsHistoryLimit }}
+  failedJobsHistoryLimit: {{ default 3 $cronjob.failedJobsHistoryLimit }}
+  concurrencyPolicy: {{ default "Forbid" $cronjob.concurrencyPolicy }}  
+  schedule: {{ $cronjob.schedule | quote }}
+  suspend: {{ default "false" $cronjob.suspend }}
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: {{ default "task" $cronjob.containersName }}
+            image: {{ $cronjob.image }}
+            imagePullPolicy: {{ default "Always" $cronjob.imagePullPolicy}}
+            args:
+            - bash
+            - -c
+            - pip install python-logstash && automatedsync
+            env:
+            - name: CONFIG_FILE_PATH
+              value: /config/config.json
+            - name: PAYMENT_EVENTS_SWAGGER
+              value: 'http://{{ .Values.dependencies.paymentevents }}.{{ .Release.Namespace }}:8080/swagger.json'
+            - name: PAYMENT_DOMAIN_SWAGGER
+              value: 'http://{{ .Values.dependencies.paymentdomain }}.{{ .Release.Namespace }}:8080/swagger.json'
+            - name: REDIS_HOST
+              value: {{ .Values.dependencies.redis }}
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: redis-password
+                  name: {{ .Values.dependencies.redis }}
+            - name: DB_PASS
+              valueFrom:
+                secretKeyRef:
+                  key: postgres-{{ include "db_usr" . }}
+                  name: {{ .Values.dependencies.paymentdomain }}
+            - name: DOMAIN_DB_URI
+              value: {{ printf "postgresql://%s:$(DB_PASS)@%s.%s/%s" (include "db_usr" .) (include "db_svc" .) .Release.Namespace $cronjob.database }}
+            resources:
+              limits:
+                cpu: {{ default "256m" $cronjob.resourcesLimitsCpu }}
+                memory: {{ default "1Gi" $cronjob.resourcesLimitsMemory }}
+              requests:
+                cpu: {{ default "20m" $cronjob.resourcesRequestsCpu }}
+                memory: {{ default "128Mi" $cronjob.resourcesRequestsMemory }}
+            volumeMounts:
+            - mountPath: {{ default "/config" $cronjob.volumeMountPath}}
+              name: {{ default "config" $cronjob.volumeMountName}}
+          restartPolicy: {{ default "OnFailure" $cronjob.restartPolicy}}
+          schedulerName: {{ default "default-scheduler" $cronjob.schedulerName}}
+          {{- with $cronjob.securityContext }}
+          securityContext:
+          {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumes:
+          - configMap:
+              defaultMode: {{ default 420 $cronjob.volumeDefaultMode }}
+              items:
+              - key: config.json
+                path: config.json
+              name: automatedsync
+            name: {{ default "config" $cronjob.volumeMountName }}  
+{{- end }} 

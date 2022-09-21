@@ -1,0 +1,151 @@
+{{- if .Values.enabled }}
+{{- if ne .Release.Namespace "prod" }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels: {{ include "datasupport.labels" . | nindent 4 }}
+  name: {{ template "datasupport.fullname" . }}
+spec:
+  progressDeadlineSeconds: {{ default 600 .Values.progressDeadlineSeconds  }}
+  replicas: {{ .Values.replicas }}  
+  revisionHistoryLimit: {{ default 10 .Values.revisionHistoryLimit  }}
+  selector:
+    matchLabels: {{ include "datasupport.selectorLabels" . | nindent 6 }}
+      component: {{ template "datasupport.fullname" . }}
+  {{- if .Values.rollingUpdateDeploymentStrategy.enabled }}
+  strategy: 
+    rollingUpdate: 
+      maxSurge: {{ default "50%" .Values.rollingUpdateDeploymentStrategy.maxSurge }}
+      maxUnavailable: {{ default "20%" .Values.rollingUpdateDeploymentStrategy.maxUnavailable }}
+    type: RollingUpdate
+  {{- end }}
+  template:
+    metadata:
+      labels: {{ include "datasupport.selectorLabels" . | nindent 8 }}
+        component: {{ template "datasupport.fullname" . }}
+    spec:
+      initContainers:
+      - name: wait-for-portal
+        image: {{ template "pgimage" . }}
+        command: ['sh', '-c', 'until psql -d {{ include "portaldb_pdb" . }} -h {{ include "portaldb_psvc" . }}.{{ .Release.Namespace }} -U {{ include "portaldb_pusr" . }} -v ON_ERROR_STOP=1; do echo waiting for database; sleep 2; done;']
+        env: {{ include "opentelemetry_envs" . | nindent 8 -}}
+        - name: PGPASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: postgres-{{ include "portaldb_pusr" . }}
+              name: {{ .Values.dependencies.clincardsecrets }}
+      containers:
+      - args:
+        - -c
+        - pip install python-logstash git+https://github.com/Greenphire/jslog4kube.git && datasupport
+        command:
+        - /bin/bash 
+        env:
+        {{- range $key, $value := .Values.customEnv }}
+        - name: {{ $key }}
+          value: {{ $value | quote }}
+        {{- end }}        
+        - name: REDIS_HOST
+          value: {{ .Values.dependencies.redis }}
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: redis-password
+              name: {{ .Values.dependencies.clincardsecrets }}
+        - name: DB_PASS
+          valueFrom:
+            secretKeyRef:
+              key: postgres-{{ include "portaldb_pusr" . }}
+              name: {{ .Values.dependencies.clincardsecrets }}
+        - name: DISABLE_CRONJOB_CREATION
+          value: "0"
+        - name: DISABLE_FILE_UPLOADS
+          value: "0"
+        - name: CLINCARD_DB_URI
+          value: {{ printf "postgresql://%s:$(DB_PASS)@%s.%s/%s" (include "portaldb_pusr" .) (include "portaldb_psvc" .) .Release.Namespace (include "portaldb_pdb" .) }}
+        - name: XFR_HOST
+          value: {{ include "hosts_xfr" . }}
+        - name: XFR_USERNAME
+          valueFrom:
+            secretKeyRef:
+              key: xfr-user
+              name: {{ .Values.dependencies.clincardsecrets }}
+        - name: XFR_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: xfr-cred
+              name: {{ .Values.dependencies.clincardsecrets }}
+        - name: RIDESHARE_SERVICE_NAME
+          value: {{ .Values.dependencies.ridesharesvc }}
+        - name: RIDESHARE_SWAGGER
+          value: http://{{ .Values.dependencies.ridesharesvc }}.{{ .Release.Namespace }}:8080/swagger.json 
+        - name: TOKEN_HOST
+          value: {{ include "portaldb_psvc" . }}
+        - name: TOKEN_DB
+          value: {{ include "portaldb_pdb" . }}
+        - name: TOKEN_USER
+          value: {{ include "portaldb_pusr" . }}
+        - name: TOKEN_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: postgres-{{ include "portaldb_pusr" . }}
+              name: {{ .Values.dependencies.clincardsecrets }}        
+        - name: FIS_DEV_PCI_USERNAME
+          valueFrom:
+            secretKeyRef:
+              key: fisdev-user
+              name: {{ template "datasupport.secrets" . }}
+        - name: FIS_DEV_PCI_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: fisdev-cred
+              name: {{ template "datasupport.secrets" . }}
+        image: {{ .Values.image }}
+        imagePullPolicy: {{ default "Always" .Values.imagePullPolicy }}
+        name: {{ template "datasupport.fullname" . }}
+        ports:
+        - containerPort: {{ default 5000 .Values.service.port }}
+          name: {{ template "datasupport.fullname" . }}
+          protocol: {{ default "TCP" .Values.service.protocol }}
+        {{- with .Values.readinessProbe }}
+        readinessProbe:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        resources: {{- toYaml .Values.resources | nindent 10 }}          
+        terminationMessagePath: {{ default "/dev/termination-log" .Values.containersTerminationMessagePath}}
+        terminationMessagePolicy: {{ default "File" .Values.containersTerminationMessagePolicy}}
+        volumeMounts:
+        - mountPath: {{ default "/config" .Values.volumes.configMountPath }}
+          name: {{ default "config" .Values.volumes.configName }}
+      serviceAccountName: {{ include "datasupport.serviceAccountName" . }}
+      {{- with .Values.securityContext }}
+      securityContext:
+        {{- toYaml .Values.securityContext | nindent 8 }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      dnsPolicy: {{ default "ClusterFirst" .Values.dnsPolicy }}
+      restartPolicy: {{ default "Always" .Values.restartPolicy }}
+      schedulerName: {{ default "default-scheduler" .Values.schedulerName }}
+      terminationGracePeriodSeconds: {{ default 30 .Values.terminationGracePeriodSeconds }}
+      volumes:
+      - name: {{ default "config" .Values.volumes.configName }}
+        configMap:
+          defaultMode: {{ default 420 .Values.volumes.configDefaultMode }}
+          name: {{ include "datasupport.fullname" . }}
+          items:
+          - key: config.json
+            path: config.json
+{{- end }}
+{{- end }}

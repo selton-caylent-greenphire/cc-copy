@@ -1,0 +1,639 @@
+---
+apiVersion: helm.toolkit.fluxcd.io/v2beta1
+kind: HelmRelease
+metadata:
+  name: clincard
+  namespace: prod
+spec:
+  interval: 10m
+  upgrade:
+    timeout: 10m
+  chart:
+    spec:
+      chart: charts/clincard
+      reconcileStrategy: Revision
+      sourceRef:
+        kind: GitRepository
+        name: clincard-prod
+        namespace: flux-system
+  values:
+    secretpath: prod
+    dependencies:
+      memcached: clincard-prod-memcached.65xxvr.cfg.use1.cache.amazonaws.com
+    global:
+      hosts:
+        domain: clincard.com
+        clincard: www.clincard.com
+        myclincard: myclincard.com
+        static: static.clincard.com
+        ws: ws.clincard.com # We require an internal and external ingress for websockets
+        apiinternal: api-internal.clincard.com
+        api: api-admin.clincard.com
+        ccadmin: controlcenter.clincard.com
+        ccalt: control-center.clincard.com
+        apigateway: api.clincard.com
+        xfr_host: xfr.greenphire.com
+      postgres:
+        image: bitnami/postgresql:11.6.0-debian-9-r0
+      db:
+        service: microservicedb-postgres
+        db_admin: svcuser
+        username: svcuser
+        host: cc-microsvc-db.cqyztjdjw9o8.us-east-1.rds.amazonaws.com
+      portaldb:
+        service: portaldb-postgres
+        database: ccportaldb
+        db_admin: clincard
+        username: clincard
+        host: cc-portal-db.cqyztjdjw9o8.us-east-1.rds.amazonaws.com
+      paymentdb:
+        db_admin: svcuser
+        service: paymentdb-postgres
+        username: svcuser
+        database: ccpayment
+        host: cc-payment-db.cqyztjdjw9o8.us-east-1.rds.amazonaws.com
+      rabbit:
+        username: payments
+        service: rabbit-rabbitmq-ha
+        adminuser: admin
+        protocol: amqp
+        host: rabbit-rabbitmq-ha
+        port: 6372
+      celery:
+        enable: true
+        username: celery
+        service: rabbit-rabbitmq-ha
+        host: rabbit-rabbitmq-ha
+        port: 6372
+      couchdb:
+        user: admin
+        service: couchdb-ha-svc-couchdb
+        db_configs: configs
+        db_flexpayopts: flexible_payment_options
+        db_payment: paymentcfg
+        db_taxmanagement: taxmgt
+        db_pis: paymentindex
+        db_pbdr: pbdr_v2
+      jira:
+        enabled: true
+        user: developermailbox@greenphire.com
+        greenphire_system_user: 557058:ea63d1b6-7134-452c-8107-51626e1291b3
+    # Subcharts / Microservices
+    antivir:
+      enabled: true      
+    authsvc:
+      enabled: true
+      secretpath: prod
+      autoscaling:
+        enabled: false
+        maxReplicas: 15
+    ccadmin:
+      enabled: true
+    configsvc:
+      enabled: true
+      replicaCount: 10
+    database:
+      enabled: true
+      external: true
+      secretpath: prod
+    ds-reports:
+      enabled: true
+      max_retries: "3"
+      ds_datawarehouse_api_url: https://gateway-dsprod01.corp.greenphire.net/ccdw
+      studypaymentdetail_portal_limit: "10000"
+      studypaymentdetail_email_limit: "1000000"
+      service:
+        hostAliases:
+        - names: [gateway-dsprod01.corp.greenphire.net]
+          ip: 10.50.152.133
+      dscelery:
+        hostAliases:
+        - names: [gateway-dsprod01.corp.greenphire.net]
+          ip: 10.50.152.133
+    ds-replicator:
+      enabled: true
+      secretpath: prod
+      dsdb_ip: "dsproddwh01.corp.greenphire.net"
+      dsdb_name: "prod1-clincard-deposits"
+      longterm:
+        enabled: true
+        hostAliases:
+        - names: [dsproddwh01.corp.greenphire.net]
+          ip: 10.50.95.109
+      shortterm:
+        enabled: true
+        hostAliases:
+        - names: [dsproddwh01.corp.greenphire.net]
+          ip: 10.50.95.109
+    epro-svc:
+      enabled: true
+      secretpath: prod
+    gravedigger:
+      enabled: true
+      secretpath: prod
+    message-service:
+      enabled: true
+      commonEnv:
+        emailHost: "smtp.sendgrid.net"
+        emailHostUser: "apikey"
+        emailNoLogin: "0"
+        emailPort: "587"
+        emailUseTls: "1"
+    paymentapprovals:
+      enabled: true
+      secretpath: prod
+      service:
+        replicaCount: 5
+      consumer:
+        replicaCount: 4
+    paymentdomain:
+      enabled: true
+      secretpath: prod
+      resources:
+        service:
+          replicas: 32
+          limits:
+            cpu: 400m
+            memory: 250Mi
+          requests:
+            cpu: 50m
+            memory: 125Mi
+        consumer:
+          replicas: 75
+          limits:
+            cpu: 90m
+            memory: 100Mi
+          requests:
+            cpu: 40m
+            memory: 50Mi
+          autoscaling:
+            enabled: false
+            minReplicas: 50
+            maxReplicas: 250
+    paymentevents:
+      enabled: true
+      secretpath: prod
+      replicaCount: 12
+    paymentgateway:
+      enabled: true
+      secretpath: prod
+      replicaCount: 10
+    paymentindex:
+      enabled: true
+      secretpath: prod
+      resources:
+        consumer:
+          replicas: 5
+          limits:
+            cpu: "1"
+            memory: 1Gi
+          requests:
+            cpu: 250m
+            memory: 100Mi
+          autoscaling:
+            enabled: false
+            minReplicas: 6
+            maxReplicas: 30
+    paymentprocessor:
+      enabled: true
+      secretpath: prod
+      replicaCount: 25
+      jira:
+        enabled: true
+      autoscaling:
+        enabled: false
+        minReplicas: 10
+        maxReplicas: 100
+    programbalancedetail:
+      enabled: true
+      secretpath: prod
+      dependencies:
+        ridesharesvc: rideshare-svc
+      resources:
+        service:
+          replicas: 3
+          limits:
+            cpu: "1"
+            memory: 4G
+          requests:
+            cpu: "1"
+            memory: 2Gi
+        consumer:
+          replicas: 6
+          limits:
+            cpu: 500m
+            memory: 500Mi
+          requests:
+            cpu: 100m
+            memory: 250Mi
+          autoscaling:
+            enabled: false
+            minReplicas: 4
+            maxReplicas: 25
+        mailer:
+          limits:
+            cpu: "4"
+            memory: 8Gi
+          requests:
+            cpu: "3"
+            memory: 4Gi
+      mailer:
+        enabled: true
+        email_host: "smtp.sendgrid.net"
+        email_user: "apikey"
+        email_port: 587
+        use_tls: 1
+        # the `no_login` setting below needs to be blank or some "Falsey" Python value.
+        # The ENV variable: "EMAIL_NO_LOGIN" does not get coerced to an int like the "EMAIL_USE_TLS" ENV variable
+        no_login: ""
+        upload_host: "media.greenphire.com"
+        upload_path: "/home/media/greenphire_media/reports/"
+        url_base: "https://media.greenphire.com/reports"
+        hostAliases:
+          - ip: "10.150.18.158"
+            hostnames:
+              - "media.greenphire.com"
+    rideshare:
+      enabled: true
+      secretpath: prod
+      aws:
+        bucket: cc-prod-default
+      rideshareService:
+        replicaCount: 4
+      rideshareConsumer:
+        replicaCount: 2
+      rideshareCelery:
+        replicaCount: 4
+      email:
+        enabled: true
+        user: api-key
+      envs:
+        lyftBaseUrl: https://api.lyft.com
+      media:
+        host: media.greenphire.com
+        base_url: https://media.greenphire.com/reports
+    study-svc:
+      enabled: true
+      secretpath: prod
+    subject-svc:
+      enabled: true
+      secretpath: prod
+    swagger-ui:
+      enabled: false
+    taxablereport:
+      enabled: true
+      service:
+        replicas: 2
+      consumer:
+        replicas: 2
+    tenninetynine:
+      enabled: true
+      secretpath: prod
+      gunicorn:
+        workers: 3
+      resources:
+        service:
+          replicas: 3
+          limits:
+            cpu: "1.5"
+            memory: 11Gi
+          requests:
+            cpu: "1"
+            memory: 8Gi
+    tinvalidation:
+      enabled: true
+      real_validation: true
+      secrepath: prod
+      replicas: 5
+    websockets-svc:
+      enabled: false
+      secretpath: prod
+      internalIngress:
+        enabled: true
+    # Clincard Template
+    jupyter:
+      enable: true
+      image: 160116585046.dkr.ecr.us-east-1.amazonaws.com/clincard/clincard:task-12.5.6
+    clincardrqworker:
+      enable: true
+      progressDeadlineSeconds: 600
+      replicas: 25
+      revisionHistoryLimit: 10
+      additionalEnvs: {}
+      resources:
+        limits:
+          cpu: 250m
+          memory: 1Gi
+        requests:
+          cpu: 50m
+          memory: 256Mi
+      autoscaling:
+        enabled: false
+        minReplicas: 15
+        maxReplicas: 100
+    clincardstatic:
+      enable: true
+    clincardlegacy:
+      enable: true
+      customEnv:
+        PROGRAM_DEPOSIT_ALERT_RECIPIENTS: "pm@greenphire.com,sales@greenphire.com,accounting@greenphire.com,clientsupport@greenphire.com,amanda.henninger@greenphire.com"
+    clincardclincard:
+      enable: true
+      replicas: 5
+      resourcesLimitsCpu: 4
+      resourcesLimitsMemory: 6500Mi
+      resourcesRequestsCpu: 2
+      resourcesRequestsMemory: 2Gi
+      customEnv:
+        CDN_LINK: "https://cdn.clincard.com"
+        CLOUDFRONT_PUBLIC_KEY_ID: "KJPF7ZQ018XGQ"
+        CLOUDFRONT_URL: "https://iat.clincard.com/*"
+        GAINSIGHT_ENABLED: "1"
+        GAINSIGHT_PX_TAG: "AP-CCJHFVTTYNOZ-2-1"
+        NEW_RELIC_ENVIRONMENT: production
+        NEW_RELIC: "True"
+        PRIVATE_KEY_PARAMETER_STORE_NAME: "/clincard/prod/cloudfront_private_key"
+        STUDY_PAYMENT_DETAIL_REPORT_ENABLED: "True"
+    clincardsecrets:
+      enable: true
+      keys:
+        - key: /clincard/prod/sendgrid-api-key
+          name: sendgrid-api-key
+        - key: /clincard/prod/jira_password
+          name: jira_api_token
+        - key: /clincard/prod/twilio_auth_token
+          name: twilio_auth_token
+        - key: /clincard/prod/twilio_sid
+          name: twilio_sid
+        - key: /clincard/prod/google_maps_api_key
+          name: google_maps_api_key
+        - key: /clincard/prod/redis_password
+          name: redis-password
+        - key: /clincard/prod/postgres-clincard
+          name: postgres-clincard
+        - key: /clincard/prod/xfr-user
+          name: xfr-user
+        - key: /clincard/prod/xfr-cred
+          name: xfr-cred
+        - key: /clincard/prod/rabbit_userpass
+          name: rabbit_userpass
+        - key: /clincard/prod/apilayer_access_key
+          name: apilayer_access_key
+        - key: /clincard/prod/rabbit_adminpass_temp
+          name: rabbit_adminpass
+        - key: /clincard/prod/arroweye_shipping_fis_cred
+          name: arroweye_password
+        - key: /clincard/prod/arroweye_shipping_fis_user
+          name: arroweye_username
+        - key: /clincard/prod/arroweye_shipping_i2c_cred 
+          name: arroweye_i2c_password
+        - key: /clincard/prod/arroweye_shipping_i2c_user 
+          name: arroweye_i2c_username
+        - key: /clincard/prod/postgres-svcuser
+          name: postgres-svcuser
+        - key: /clincard/common/google_api_js_key
+          name: google_api_js_key
+        - key: /clincard/prod/lyft_verification_token
+          name: lyft_verification_token
+        - key: /clincard/prod/google_recaptcha_secret_key
+          name: google_recaptcha_secret_key
+        - key: /clincard/prod/google_recaptcha_site_key
+          name: google_recaptcha_site_key
+        - key: /clincard/prod/pingone_api_key
+          name: pingone_api_key
+        - key: /clincard/prod/pingone_credential
+          name: pingone_credential
+    passwordmanagersecrets:
+      enabled: true      
+    ccsshsecrets:
+      enabled: true      
+    fisgpgsecrets:
+      enabled: true      
+    fissshsecrets:
+      enabled: true
+      keys:
+        - key: /clincard/prod/fis-ssh-key-id_rsa
+          name: id_rsa        
+        - key: /clincard/prod/fis-ssh-key-known_hosts
+          name: known_hosts
+    cronjobs:
+      # automatedSync cronJob definition.
+      automatedSync:
+        enabled: true
+      # -- Enable use of subchart dependency subcharts/cronjobs
+      enable: true
+      enableDebug: false
+      # paymentProcessingAlert cronJob definition.
+      paymentProcessingAlert:
+        enabled: true
+        resourcesLimitsMemory: 4Gi
+      # pendingPaymentsNotification cronJob definition.
+      pendingPaymentsNotification:
+        enabled: true
+      # recentPaymentActivityEmail cronJob definition.
+      recentPaymentActivityEmail:
+        enabled: true
+      # depositStatusAlert cronJob definition.
+      depositStatusAlert:
+        enabled: true
+      # negativeBalanceReport cronJob definition.
+      negativeBalanceReport:
+        enabled: true
+      # nonUsdDepositsReport cronJob definition.
+      nonUsdDepositsReport:
+        enabled: true
+      # sendIssuanceFundingReport cronJob definition.
+      sendIssuanceFundingReport:
+        enabled: true
+      # monthlyInventoryControlReport cronJob definition.
+      monthlyInventoryControlReport:
+        enabled: true 
+      # processTransferFundsTickets cronJob definition.
+      processTransferFundsTickets:
+        enabled: true
+      # travelModuleDaily cronJob definition.
+      travelModuleDaily:
+        enabled: true
+      # travelModuleHourly cronJob definition.
+      travelModuleHourly:
+        enabled: true
+      # cbOrderMonitoring cronJob definition.
+      cbOrderMonitoring:
+        enabled: true
+        image: 160116585046.dkr.ecr.us-east-1.amazonaws.com/clincard/clincard:task-12.5.6
+        customEnv:
+          PASSWORD_MANAGER_RESOURCE_ID: "901"
+          PCI_SERVER_HOST: "10.150.20.127"
+        resourcesLimitsMemory: 8192Mi
+      # cbSendOrders cronJob definition.
+      cbSendOrders:
+        enabled: true
+        image: 160116585046.dkr.ecr.us-east-1.amazonaws.com/clincard/clincard:task-12.5.6
+        customEnv:
+          PASSWORD_MANAGER_RESOURCE_ID: "901"
+          FIS_HOSTNAME: sftbdc.fisglobal.com
+          FIS_USER: 37545GrnPhire1B
+          FIS_PREFIX_NUMBER: "546268801"
+      cbCardInfo:
+        enabled: true
+        image: 160116585046.dkr.ecr.us-east-1.amazonaws.com/clincard/clincard:task-12.5.6
+        customEnv:
+          PASSWORD_MANAGER_RESOURCE_ID: "901"
+          PCI_SERVER_DIR: /home/ccshared/
+          PCI_SERVER_HOST: "10.150.20.127"
+          PCI_SERVER_USER: clincardsftp
+      # runDupePaymentsCheck cronJob definition.
+      runDupePaymentsCheck:
+        enabled: true
+        client_ids: '1071,867,962'
+        recipients: 'elizabeth.gnias@greenphire.com,eis@greenphire.com,duk.kim@greenphire.com,issam.ahmed@greenphire.com'
+        resourcesRequestsMemory: 256Mi
+        resourcesLimitsMemory: 1Gi
+      cardOrderReportMonthly:
+        enabled: true
+        customEnv:
+          CRON_K8S_REPORT_RECIPIENTS: finance@greenphire.com,amar.patel@greenphire.com
+      cardOrderReportWeeklySupport:
+        enabled: true
+        customEnv:
+          CRON_K8S_REPORT_RECIPIENTS: danny.offenbacher@greenphire.com,denish.patel@greenphire.com,jared.steenhoff@greenphire.com,keinan.fry@greenphire.com,amy.pedersen@greenphire.com,hannah.bogedain-williams@greenphire.com,amanda.henninger@greenphire.com
+      cardOrderReportWeekly:
+        enabled: true
+        customEnv:
+          CRON_K8S_REPORT_RECIPIENTS: finance@greenphire.com,amar.patel@greenphire.com
+      i2cSubmitCardOrders:
+        enabled: true
+      i2cArroweyeShippingConfirmation:
+        enabled: true
+        customEnv:
+          ARROWEYE_SFTP_SERVER: sftp.arroweyesolutions.com
+          ARROWEYE_SFTP_ROOT_DIR: fromASI
+      fisArroweyeShippingConfirmation:
+        enabled: true
+        customEnv:
+          ARROWEYE_SFTP_SERVER: sftp.arroweyesolutions.com
+          ARROWEYE_SFTP_ROOT_DIR: null
+      operationsShippingConfirmation:
+        enabled: true
+        customEnv:
+          ARROWEYE_SFTP_SERVER: xfr.greenphire.com
+          ARROWEYE_SFTP_ROOT_DIR: "shipping_files/shipping_files"
+      # amcCustomExtract cronJob definition.
+      amcCustomExtract:
+        enabled: true
+        customEnv:
+          XFR_HOST: "xfr.greenphire.com"
+      # biomarinWeeklyComplianceMessage cronJob definition.
+      biomarinWeeklyComplianceMessage:
+        enabled: true
+      # duplicatePaymentAlert cronJob definition.
+      duplicatePaymentAlert:
+        enabled: true
+      # columbiaPovertyUsageData cronJob definition.
+      columbiaPovertyUsageData:
+        enabled: true
+        image: 160116585046.dkr.ecr.us-east-1.amazonaws.com/clincard/clincard:task-12.5.6
+      # columbiaPovertyPayments cronJob definition.
+      columbiaPovertyPayments:
+        enabled: true
+      # i2cCardCreationProcessor cronJob definition.
+      i2cCardCreationProcessor:
+        enabled: true
+        customEnv:
+          XFR_HOST: "xfr.greenphire.com"
+      # i2cCardSummaryProcessor cronJob definition.
+      i2cCardSummaryProcessor:
+        enabled: true
+        customEnv:
+          XFR_HOST: "xfr.greenphire.com"
+      # i2cForexProcessorCanadaPt cronJob definition.
+      i2cForexProcessorCanadaPt:
+        enabled: true
+      # i2cForexProcessorCorrections cronJob definition.
+      i2cForexProcessorCorrections:
+        enabled: true
+        customEnv:
+          I2C_FOREX_HOST: "xfr.greenphire.com"
+      # i2cForexProcessorEuropeTpl cronJob definition.
+      i2cForexProcessorEuropeTpl:
+        enabled: true
+      # batchProcessorSftp cronJob definition.
+      batchProcessorSftp:
+        enabled: true
+        resourcesRequestsCpu: 1500m
+        resourcesRequestsMemory: 10Gi  
+        resourcesLimitsCpu: 1500m
+        resourcesLimitsMemory: 10Gi
+        customEnv:
+          XFR_HOST: "xfr.greenphire.com"
+      # wfPullFiles cronJob definition.
+      wfPullFiles:
+        enabled: true
+        image: 160116585046.dkr.ecr.us-east-1.amazonaws.com/clincard/clincard:task-hotfix-CCSTACK-1703_wf_address_issue-064a2aa308
+        customEnv:
+          WF_S3BUCKET_BUCKET_NAME: cc-prod-banking
+          WF_SFTP_PROD_SERVER: "10.50.8.130"
+          WF_SFTP_USER: "wells_xfr"
+          PASSWORD_MANAGER_ACCOUNT_NAME: "wells_xfr"
+          PASSWORD_MANAGER_RESOURCE_ID: "6603"
+      # wfPushFiles cronJob definition.
+      wfPushFiles:
+        enabled: true
+        image: 160116585046.dkr.ecr.us-east-1.amazonaws.com/clincard/clincard:task-hotfix-CCSTACK-1703_wf_address_issue-064a2aa308
+        customEnv:
+          WF_S3BUCKET_BUCKET_NAME: cc-prod-banking
+          WF_SFTP_PROD_SERVER: "10.50.8.130"
+          WF_SFTP_USER: "wells_xfr"
+          PASSWORD_MANAGER_ACCOUNT_NAME: "wells_xfr"
+          PASSWORD_MANAGER_RESOURCE_ID: "6603"
+      sendAppointmentReminders:
+        enabled: true
+        schedule: '*/5 * * * *'
+        customEnv: null
+      sendBalanceRemindersFis:
+        enabled: true
+        schedule: '0 13 * * *'
+        customEnv: null
+      sendBalanceRemindersI2cCan:
+        enabled: true
+        customEnv: null
+      sendBalanceRemindersI2cEU:
+        enabled: true
+        schedule: '0 7 * * *'
+        customEnv: null
+      sendBalanceRemindersI2cUS:
+        enabled: true
+        schedule: '30 16 * * *'
+        customEnv: null
+      smsHandler:
+        enabled: true
+    jira:
+      enabled: true
+      user: developermailbox@greenphire.com
+    twilio:
+      enabled: true
+    efs:
+      enable: true
+      handle: fs-a48b53ec
+      data:
+        capacityStorage: "50Gi"
+        path: /clincard-efs-data-pvc-8db6e3b1-3d9b-11e8-9c66-12c8b90abbc4
+      media:
+        capacityStorage: "50Gi"
+        path: /clincard-efs-media-pvc-c36b9c3b-3d9b-11e8-9c66-12c8b90abbc4
+      mediaUploads:
+        capacityStorage: "10Gi"
+        path: /clincard-media-uploads-pvc-ea3aaa5a-6734-11e8-bdd2-12a6b9681ac6
+      claim:
+        capacityStorage: "10Gi"
+      pgp:
+        capacityStorage: "50Gi"
+        path: /clincard-pgp-keys-pvc-ae0fd6c5-91ab-11eb-9304-126c8307baad
+    
+    celerybatchprocessor:
+      enabled: true
+      resourcesLimitsMemory: 1Gi
+
+    celery:
+      resourcesLimitsCpu: 850m
+      resourcesLimitsMemory: 1Gi

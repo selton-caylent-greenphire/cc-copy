@@ -1,0 +1,86 @@
+name: ds-replicator
+nameOverride: ds-replicator
+fullnameOverride: ds-replicator
+secretpath: lower
+image: 160116585046.dkr.ecr.us-east-1.amazonaws.com/clincard/paymentdomain-dataservices:2.0.7
+
+imagePullPolicy: Always
+suspend: false
+restartPolicy: OnFailure
+concurrencyPolicy: Forbid
+schedulerName: default-scheduler
+# -- Used to set the DEBUG environment variable for all CronJobs
+enableDebug: "False"
+
+# -- History limits that apply for all cronJobs
+historyLimits:
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+
+volumes:
+- configMap:
+    defaultMode: 420
+    items:
+    - key: config.json
+      path: config.json
+    name: paymentdomain
+  name: config
+
+resources:
+  # --  Default CronJobs resources: To change specific cronjob add the values in the parameters resourcesLimitsCpu, resourcesLimitsMemory.
+  limits:
+    cpu: 256m
+    memory: 256Mi
+  # --  Default CronJobs resources: To change specific cronjob add the values in the parameters resourcesRequestsCpu, resourcesRequestsMemory.
+  requests:
+    cpu: 20m
+    memory: 128Mi
+
+dsdb_ip: ""
+dsdb_name: "stg1-clincard-deposits"
+redis_db: "2"
+
+shortterm:
+  enabled: false
+  name: ds-replicator-shortterm-aws
+  containersName: paymentdomain-replicator-aws
+  args: ["pip install python-logstash && ds_replication --minutes=14400"]
+  schedule: '*/5 * * * *'
+  resourcesLimitsCpu: 400m
+  resourcesLimitsMemory: 200Mi
+  resourcesRequestsCpu: 300m
+  resourcesRequestsMemory:  100Mi
+  hostAliases:
+    - names: [dsstgsql01.corp.greenphire.net]
+      ip: 10.75.64.241
+
+longterm:
+  enabled: false
+  name: ds-replicator-longterm-aws
+  containersName: paymentdomain-replicator-aws
+  args: ["pip install python-logstash && ds_replication"]
+  schedule: '0 */10 * * *'
+  resourcesLimitsCpu: "1"
+  resourcesLimitsMemory: 8Gi
+  resourcesRequestsCpu: 100m
+  resourcesRequestsMemory:  2Gi
+  hostAliases:
+    - names: [dsstgsql01.corp.greenphire.net]
+      ip: 10.75.64.241
+
+dependencies:
+  # -- Secrets service dependency **redis**
+  redis: redis
+  # -- Secrets dependency [clincard](https://github.com/Greenphire/clincard-config/tree/uat/charts/clincard)
+  clincardsecrets: clincard-secret
+  # -- Service dependency [paymentdomain](https://github.com/Greenphire/clincard-config/tree/uat/charts/clincard/subcharts/paymentdomain)
+  paymentdomain: paymentdomain
+
+serviceAccount:
+  create: false
+  name: ""
+
+db:
+  service: postgresql
+  database: paymentdomain
+  username: uat

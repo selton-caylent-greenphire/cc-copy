@@ -1,0 +1,88 @@
+nameOverride: "paymentevents"
+fullnameOverride: "paymentevents"
+secretpath: lower
+tier: api
+
+image: 160116585046.dkr.ecr.us-east-1.amazonaws.com/clincard/paymentevents-service:1.7.0
+
+dependencies:
+  # -- Secrets service dependency **Rabbit-mq**
+  rabbitmqSecrets: rabbitmq-secrets
+  postgresadmin: postgres-admin
+   # -- Secrets dependency [clincard](https://github.com/Greenphire/clincard-config/tree/uat/charts/clincard)
+  clincardsecrets: clincard-secret
+
+# The below values can be overridden by parent chart global values. 
+# See clincard chart values.yaml file.
+# Start - chart global values
+paymentdb:
+  service: paymentdb-postgres
+  database: paymentevents
+  username: paymentevents
+  db_admin: clincard
+
+rabbit:
+  username: payments
+  service: rabbit-rabbitmq-ha
+# end - chart global values
+
+volumes:
+  - name: config 
+    configMap:
+      defaultMode: 420
+      items:
+      - key: config.json
+        path: config.json
+      name: paymentevents
+
+readinessProbe:
+  failureThreshold: 3
+  httpGet:
+    path: /swagger.json
+    port: 8080
+    scheme: HTTP
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  successThreshold: 1
+  timeoutSeconds: 5
+
+livenessProbe:
+  failureThreshold: 3
+  httpGet:
+    path: /swagger.json
+    port: 8080
+    scheme: HTTP
+  initialDelaySeconds: 30
+  periodSeconds: 30
+  successThreshold: 1
+  timeoutSeconds: 5
+
+configMapJson:
+  - dataKey: config.json
+    dataKeyTemplateSrc: "/_configmap.json.tpl"
+    loggerServiceName: paymentevents
+
+service:
+  enabled: true
+  type: ClusterIP
+  port: 8080
+
+replicaCount: 6
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 80
+  targetMemoryUtilizationPercentage: 80
+
+serviceAccount:
+  create: false 
+  name: ""         
+
+dnsPolicy: ClusterFirst
+restartPolicy: Always
+schedulerName: default-scheduler    
+terminationGracePeriodSeconds: 30
+
+rollingUpdateDeploymentStrategy:
+  enabled: true

@@ -1,0 +1,56 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels: {{ include "gravedigger.labels" . | nindent 4 }}
+    tier: {{ .Values.consumer.tier }}
+  name: {{ template "gravedigger.consumer.fullname" . }}
+spec:
+  progressDeadlineSeconds: {{ default 600 .Values.consumer.progressDeadlineSeconds }}
+  replicas: {{ .Values.consumer.replicas }}
+  revisionHistoryLimit: {{ default 10 .Values.consumer.revisionHistoryLimit }}
+  selector:
+    matchLabels:
+      app: {{ template "gravedigger.consumer.fullname" . }}
+      tier: {{ .Values.consumer.tier }}
+  strategy:
+    rollingUpdate:
+      maxSurge: {{ .Values.consumer.rollingUpdate.maxSurge }}
+      maxUnavailable: {{ .Values.consumer.rollingUpdate.maxUnavailable }}
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: {{ template "gravedigger.consumer.fullname" . }}
+        tier: {{ .Values.consumer.tier }}
+    spec:
+      containers:
+      - args:
+        - -c
+        - pip install python-logstash && grave-consumer
+        command:
+        - /bin/bash
+        env: {{ include (print .Template.BasePath "/_common_envs.yaml.tpl") . | nindent 8 -}}
+        - name: PAYMENTS_EXCHANGE
+          value: payments
+        - name: PAYMENTS_QUEUE
+          value: grave_digger_payments
+        - name: PAYMENTS_ROUTING_KEY
+          value: payments.*
+        image: {{ .Values.consumer.image }}
+        imagePullPolicy: IfNotPresent
+        name: gravedigger-consumer
+        resources:
+          limits:
+            cpu: "{{ .Values.consumer.resources.limits.cpu }}"
+            memory: "{{ .Values.consumer.resources.limits.memory }}"
+          requests:
+            cpu: "{{ .Values.consumer.resources.requests.cpu }}"
+            memory: "{{ .Values.consumer.resources.requests.memory }}"
+        volumeMounts:
+        - mountPath: {{ default "/config" .Values.containersVolumeMountsMountPath}}
+          name: {{ default "config" .Values.containersVolumeMountsName}}
+      {{- with .Values.volumes }}
+      volumes:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "gravedigger.serviceAccountName" . }}

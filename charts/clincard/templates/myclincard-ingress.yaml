@@ -1,0 +1,27 @@
+{{- if eq .Values.clincardclincard.enable true }}
+{{- if eq .Release.Namespace "prod" }}
+{{- $deployment := .Values.clincardclincard }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ $deployment.myclincardIngress.name }}
+  annotations:
+    ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/enable-cors: {{ default "true" $deployment.myclincardIngress.cors | quote }}
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      proxy_set_header X-SSL-Protocol $ssl_protocol;
+      proxy_set_header X-Scheme $scheme;      
+    nginx.ingress.kubernetes.io/permanent-redirect: https://consumercardaccess.com/myclincard
+    nginx.ingress.kubernetes.io/from-to-www-redirect: {{ default "true" $deployment.myclincardIngress.wwwRedirect | quote }}
+spec:
+  ingressClassName: {{ $deployment.myclincardIngress.ingressClass }}
+  tls:
+  - secretName: {{ $deployment.myclincardIngress.secretName }}
+    hosts:
+      - {{ include "hosts_mycc" . }}
+      - www.{{ include "hosts_mycc" . }}
+  rules:
+  - host: {{ include "hosts_mycc" . }}
+  - host: www.{{ include "hosts_mycc" . }}
+{{- end }}
+{{- end }}

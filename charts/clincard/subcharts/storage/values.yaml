@@ -1,0 +1,12 @@
+name: storage
+nameOverride: storage
+fullnameOverride: storage
+
+ebs:
+  create: false
+
+efs:
+  create: false
+  fileSystemId: 
+  awsRegion: us-east-1
+  provisionerName: ccnew

@@ -1,0 +1,64 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels: {{ include "messageservice.labels" . | nindent 4 }}
+    tier: {{ .Values.messagecelery.tier }}
+  name: {{ template "messageservice.fullname" . }}-celery
+spec:
+  progressDeadlineSeconds: {{ default 600 .Values.messagecelery.progressDeadlineSeconds }}
+  replicas: {{ .Values.messagecelery.replicas }}
+  revisionHistoryLimit: {{ default 10 .Values.messagecelery.revisionHistoryLimit }}
+  selector:
+    matchLabels:
+      app: {{ template "messageservice.fullname" . }}-celery
+      tier: {{ .Values.messagecelery.tier }}
+  strategy:
+    rollingUpdate:
+      maxSurge: {{ default "25%" .Values.messagecelery.rollingUpdate.maxSurge | quote }}
+      maxUnavailable: {{ default "25%" .Values.messagecelery.rollingUpdate.maxUnavailable | quote }}
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: {{ template "messageservice.fullname" . }}-celery
+        tier: {{ .Values.messagecelery.tier }}
+    spec:
+      containers:
+      - args:
+        - celery
+        - -A
+        - messagesvc.celery:app
+        - worker
+        - -l
+        - info
+        env:
+{{ include (print .Template.BasePath "/_common_envs.yaml.tpl") . | indent 8 }}
+        - name: MAX_RETRIES
+          value: {{ .Values.max_retries | quote }}
+        - name: RETRY_COUNTDOWN
+          value: {{ .Values.retry_countdown | quote }}
+        image: {{ .Values.messagecelery.image }}
+        imagePullPolicy: IfNotPresent
+        name: {{ template "messageservice.fullname" . }}-celery-worker
+        resources:
+          limits:
+            cpu: {{ .Values.messagecelery.resources.limits.cpu | quote }}
+            memory: {{ .Values.messagecelery.resources.limits.memory | quote }}
+          requests:
+            cpu: {{ .Values.messagecelery.resources.requests.cpu | quote }}
+            memory: {{ .Values.messagecelery.resources.requests.memory | quote }}
+        volumeMounts:
+        - mountPath: {{ default "/config" .Values.containersVolumeMountsMountPath}}
+          name: {{ default "config" .Values.containersVolumeMountsName}}
+{{- with .Values.messagecelery.hostAliases }}
+      hostAliases:
+{{- range . }}
+        - hostnames: {{ .names | toYaml | nindent 10 }}
+          ip: {{ .ip }}
+{{- end }}
+{{- end }}
+      {{- with .Values.volumes }}
+      volumes:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "messageservice.serviceAccountName" . }}

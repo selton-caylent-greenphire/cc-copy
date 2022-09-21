@@ -1,0 +1,36 @@
+{{- if and .Values.resources.consumer.autoscaling .Values.resources.consumer.autoscaling.enabled }}
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: {{ include "paymentindex.fullname" . }}-rabbitmq-scaledobject
+  labels: {{ include "paymentindex.labels" . | nindent 4 }}
+    app: {{ template "paymentindex.name" . }}
+    component: {{ template "paymentindex.fullname" . }}
+    release: {{ .Release.Name }}
+    tier: {{ .Values.tier }}
+spec:
+  scaleTargetRef: {{ include "paymentindex.consumer.autoscaling.scaleTargetRef" . | nindent 4 }}
+  minReplicaCount: {{ default 2 .Values.resources.consumer.autoscaling.minReplicas }}
+  maxReplicaCount: {{ default 10 .Values.resources.consumer.autoscaling.maxReplicas }}
+  pollingInterval: {{ default 30 .Values.resources.consumer.autoscaling.pollingInterval }}
+  advanced:
+    horizontalPodAutoscalerConfig:
+      behavior:
+        scaleUp:
+          stabilizationWindowSeconds: 0
+          policies:
+          - type: Pods
+            value: {{ default 1 .Values.resources.consumer.autoscaling.podsPerScaling }}
+            periodSeconds: {{ default 60 .Values.resources.consumer.autoscaling.scalingUpInterval }}
+        scaleDown:
+          stabilizationWindowSeconds: 300
+          policies:
+          - type: Pods
+            value: {{ default 1 .Values.resources.consumer.autoscaling.podsPerScaling }}
+            periodSeconds: {{ default 60 .Values.resources.consumer.autoscaling.scalingDownInterval }}
+  triggers:
+  - type: rabbitmq
+    metricType: Value
+    metadata: {{ include "paymentindex.consumer.autoscaling.triggerMetadata" . | nindent 6 }}
+{{- end }}

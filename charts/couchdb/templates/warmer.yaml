@@ -1,0 +1,74 @@
+{{- $csvc := .Values.warmer.dbs.service -}}
+{{- $dbpis := .Values.warmer.dbs.db_pis -}}
+{{- $dbpbdr := .Values.warmer.dbs.db_pbdr -}}
+{{- if eq .Values.warmer.enabled true }}
+apiVersion: batch/v1beta1
+kind: CronJob
+metadata:
+  labels:
+    app: {{ template "couchdb.name" . }}
+    component: {{ template "couchdb.name" . }}-warmer
+    release: {{ .Release.Name }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    heritage: {{ .Release.Service }}
+  name: {{ template "couchdb.name" . }}-warmer
+spec:
+  concurrencyPolicy: {{ default "Forbid" .Values.warmer.concurrencyPolicy  }}
+  failedJobsHistoryLimit: {{ default .Values.historyLimits.failedJobsHistoryLimit .Values.warmer.failedJobsHistoryLimit  }}
+  successfulJobsHistoryLimit: {{ default .Values.historyLimits.successfulJobsHistoryLimit .Values.warmer.successfulJobsHistoryLimit }}
+  jobTemplate:
+    metadata:
+      creationTimestamp: null
+    spec:
+      template:
+        metadata:
+          creationTimestamp: null
+        spec:
+          containers:
+          - args:
+            - -c
+            - curl "http://{{ $csvc }}:5984/{{ $dbpis }}/_design/Payment/_view/payer_id?reduce=true" -u "$(COUCH_USER):$(COUCH_PASSWORD)"
+              && curl "http://{{ $csvc }}:5984/{{ $dbpis }}/_design/Payer/_view/client_id?reduce=true" -u "$(COUCH_USER):$(COUCH_PASSWORD)"
+              && curl "http://{{ $csvc }}:5984/{{ $dbpis }}/_design/Payee/_view/card_processor?reduce=true" -u "$(COUCH_USER):$(COUCH_PASSWORD)"
+              && curl "http://{{ $csvc }}:5984/{{ $dbpis }}/_design/TenNinetyNine/_view/year_program_v2?reduce=true&group_level=1" -u "$(COUCH_USER):$(COUCH_PASSWORD)"
+              && curl "http://{{ $csvc }}:5984/{{ $dbpbdr }}/_design/ProgramBalanceDetail/_view/ledgers?reduce=true" -u "$(COUCH_USER):$(COUCH_PASSWORD)"
+              && curl "http://{{ $csvc }}:5984/{{ $dbpbdr }}/_design/ProgramBalanceDetail/_view/ledgers_by_ccuser?reduce=true" -u "$(COUCH_USER):$(COUCH_PASSWORD)"
+              && curl "http://{{ $csvc }}:5984/{{ $dbpbdr }}/_design/ProgramBalanceDetail/_view/ledgers_by_payee?reduce=true" -u "$(COUCH_USER):$(COUCH_PASSWORD)"
+              && curl "http://{{ $csvc }}:5984/{{ $dbpbdr }}/_design/ProgramBalanceDetail/_view/ledgers_by_payerpayee?reduce=true" -u "$(COUCH_USER):$(COUCH_PASSWORD)"
+              && curl "http://{{ $csvc }}:5984/{{ $dbpbdr }}/_design/ProgramBalanceDetail/_view/pbdr_report?reduce=true" -u "$(COUCH_USER):$(COUCH_PASSWORD)"
+              && curl "http://{{ $csvc }}:5984/{{ $dbpbdr }}/_design/ProgramBalanceDetail/_view/pending_summary?reduce=true" -u "$(COUCH_USER):$(COUCH_PASSWORD)"
+              && curl "http://{{ $csvc }}:5984/{{ $dbpbdr }}/_design/ProgramBalanceDetail/_view/period_summary?reduce=true" -u "$(COUCH_USER):$(COUCH_PASSWORD)"
+              && curl "http://{{ $csvc }}:5984/{{ $dbpbdr }}/_design/ProgramBalanceDetail/_view/starting_balance?reduce=true" -u "$(COUCH_USER):$(COUCH_PASSWORD)"
+              && curl "http://{{ $csvc }}:5984/{{ $dbpbdr }}/_design/ProgramSummary/_view/distinct-count-on-payee-by-program?reduce=true" -u "$(COUCH_USER):$(COUCH_PASSWORD)"
+              && curl "http://{{ $csvc }}:5984/{{ $dbpbdr }}/_design/ProgramSummary/_view/distinct-count-on-payment-by-program-v2?reduce=true" -u "$(COUCH_USER):$(COUCH_PASSWORD)"
+              && curl "http://{{ $csvc }}:5984/{{ $dbpbdr }}/_design/ProgramSummary/_view/total-amounts-on-ledger-by-program?reduce=true" -u "$(COUCH_USER):$(COUCH_PASSWORD)"
+            command:
+            - /bin/sh
+            env:
+              - name: COUCH_USER
+                valueFrom:
+                  secretKeyRef:
+                    key: adminUsername
+                    name: {{ template "couchdb.fullname" . }}
+              - name: COUCH_PASSWORD
+                valueFrom:
+                  secretKeyRef:
+                    key: adminPassword
+                    name: {{ template "couchdb.fullname" . }}
+            image: {{ default "alpine/curl" .Values.warmer.image  }}
+            imagePullPolicy: {{ default "Always" .Values.warmer.imagePullPolicy }}
+            name: {{ default "task" .Values.warmer.taskName }}
+            resources:
+              requests:
+                cpu: {{ default "20m" .Values.warmer.resourcesCpu }}
+                memory: {{ default "128Mi" .Values.warmer.resourcesMemory }}
+            terminationMessagePath: {{ default "/dev/termination-log" .Values.warmer.terminationMessagePath }}
+            terminationMessagePolicy: {{ default "File" .Values.warmer.terminationMessagePolicy }}
+          dnsPolicy: {{ default "ClusterFirst" .Values.warmer.dnsPolicy }}
+          restartPolicy: {{ default "OnFailure" .Values.warmer.restartPolicy }}
+          schedulerName: {{ default "default-scheduler" .Values.warmer.schedulerName }}
+          securityContext: {}
+          terminationGracePeriodSeconds: {{ default 30 .Values.warmer.terminationGracePeriodSeconds }}
+  schedule: {{ .Values.warmer.schedule | quote }}
+  suspend: {{ .Values.warmer.suspend }}
+{{- end }}

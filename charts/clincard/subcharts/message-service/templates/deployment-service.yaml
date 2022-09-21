@@ -1,0 +1,74 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels: {{ include "messageservice.labels" . | nindent 4 }}
+    tier: {{ .Values.service.tier }}
+  name: {{ template "messageservice.fullname" . }}
+spec:
+  progressDeadlineSeconds: {{ default 600 .Values.service.progressDeadlineSeconds }}
+  replicas: {{ .Values.service.replicas }}
+  revisionHistoryLimit: {{ default 10 .Values.service.revisionHistoryLimit }}
+  selector:
+    matchLabels:
+      app: {{ template "messageservice.fullname" . }}
+      tier: {{ .Values.service.tier }}
+  strategy:
+    rollingUpdate:
+      maxSurge: {{ default "25%" .Values.service.rollingUpdate.maxSurge }}
+      maxUnavailable: {{ default "25%" .Values.service.rollingUpdate.maxUnavailable }}
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: {{ template "messageservice.fullname" . }}
+        tier: {{ .Values.service.tier }}
+    spec:
+      containers:
+      - args:
+        - -c
+        - pip install python-logstash git+https://github.com/Greenphire/jslog4kube.git && messagesvc
+        command:
+        - /bin/bash
+        env:
+{{ include (print .Template.BasePath "/_common_envs.yaml.tpl") . | indent 8 }}
+        - name: CONFIG_FILE_PATH
+          value: /config/config.json
+        - name: LIQUIDFILES_URL
+          value: {{ .Values.liquidfiles_url }}
+        - name: LIQUIDFILES_API_KEY
+          valueFrom:
+            secretKeyRef:
+              key: apikey
+              name: files
+        image: {{ .Values.service.image }}
+        imagePullPolicy: IfNotPresent
+        name: {{ template "messageservice.fullname" . }}
+        {{- with .Values.service.readinessProbe }}
+        readinessProbe:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        ports:
+        - containerPort: 8080
+          name: {{ default "http" .Values.service.portName | quote }}
+          protocol: TCP
+        resources:
+          limits:
+            cpu: "{{ .Values.service.resources.limits.cpu }}"
+            memory: "{{ .Values.service.resources.limits.memory }}"
+          requests:
+            cpu: "{{ .Values.service.resources.requests.cpu }}"
+            memory: "{{ .Values.service.resources.requests.memory }}"
+        volumeMounts:
+        - mountPath: {{ default "/config" .Values.containersVolumeMountsMountPath}}
+          name: {{ default "config" .Values.containersVolumeMountsName}}
+{{- with .Values.hostAliases }}
+{{- range .hostAliases }}
+          - hostnames: {{ .names | toYaml | nindent 12 }}
+            ip: {{ .ip }}
+{{- end }}
+{{- end }}
+      {{- with .Values.volumes }}
+      volumes:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "messageservice.serviceAccountName" . }}

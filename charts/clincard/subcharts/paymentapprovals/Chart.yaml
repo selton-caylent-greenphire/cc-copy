@@ -1,0 +1,15 @@
+apiVersion: v2
+name: paymentapprovals
+description: Helm chart with the paymentapprovals definition
+type: application
+version: 0.2.7
+appVersion: "1.0"
+maintainers:
+- name: Helene McElroy
+  email: helene.mcelroy@greenphire.com
+- name: Jeisson Osorio
+  email: jeisson.osorio@greenphire.com
+keywords:  
+  - payment
+  - payment-approvals
+  - rabbit-mq

@@ -1,0 +1,179 @@
+{{- if eq .Values.efs.enable true }}
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: efs-pv-{{ .Release.Namespace }}-data
+  labels:
+    environment: {{ .Release.Namespace }}
+spec:
+  capacity:
+    storage: {{ default "50Gi" (((.Values.efs).data).capacityStorage) }}
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: efs-sc
+  csi:
+    driver: efs.csi.aws.com
+    volumeHandle: {{ printf "%s:%s" .Values.efs.handle (default "/clincard/data" (((.Values.efs).data).path)) }}
+---
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  annotations:
+    volume.beta.kubernetes.io/storage-class: "efs-sc"
+    pv.kubernetes.io/bind-completed: "yes"
+    pv.kubernetes.io/bound-by-controller: "yes"
+    volume.beta.kubernetes.io/storage-provisioner: efs.csi.aws.com
+  name: clincard-efs-{{ .Release.Namespace }}-data
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: {{ default "50Gi" (((.Values.efs).data).capacityStorage) }}
+  storageClassName: efs-sc
+  volumeMode: Filesystem
+  volumeName: efs-pv-{{ .Release.Namespace }}-data
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: efs-pv-{{ .Release.Namespace }}-media
+spec:
+  capacity:
+    storage: {{ default "50Gi" (((.Values.efs).media).capacityStorage) }}
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: efs-sc
+  csi:
+    driver: efs.csi.aws.com
+    volumeHandle: {{ printf "%s:%s" .Values.efs.handle (default "/clincard/media/client/studies/receipts" (((.Values.efs).media).path)) }}
+---
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  annotations:
+    volume.beta.kubernetes.io/storage-class: "efs-sc"
+    pv.kubernetes.io/bind-completed: "yes"
+    pv.kubernetes.io/bound-by-controller: "yes"
+    volume.beta.kubernetes.io/storage-provisioner: efs.csi.aws.com
+  name: clincard-efs-{{ .Release.Namespace }}-media
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: {{ default "50Gi" (((.Values.efs).media).capacityStorage) }}
+  storageClassName: efs-sc
+  volumeMode: Filesystem
+  volumeName: efs-pv-{{ .Release.Namespace }}-media
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: efs-pv-{{ .Release.Namespace }}-media-uploads
+spec:
+  capacity:
+    storage: {{ default "10Gi" (((.Values.efs).mediaUploads).capacityStorage) }}
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: efs-sc
+  csi:
+    driver: efs.csi.aws.com
+    volumeHandle: {{ printf "%s:%s" .Values.efs.handle (default "/clincard/media/uploads" (((.Values.efs).mediaUploads).path)) }}
+---
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  annotations:
+    volume.beta.kubernetes.io/storage-class: "efs-sc"
+    pv.kubernetes.io/bind-completed: "yes"
+    pv.kubernetes.io/bound-by-controller: "yes"
+    volume.beta.kubernetes.io/storage-provisioner: efs.csi.aws.com
+  name: clincard-{{ .Release.Namespace }}-media-uploads
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: {{ default "10Gi" (((.Values.efs).mediaUploads).capacityStorage) }}
+  storageClassName: efs-sc
+  volumeMode: Filesystem
+  volumeName: efs-pv-{{ .Release.Namespace }}-media-uploads
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: efs-pv-{{ .Release.Namespace }}-claim
+spec:
+  capacity:
+    storage: {{ default "10Gi" (((.Values.efs).claim).capacityStorage) }}
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: efs-sc
+  csi:
+    driver: efs.csi.aws.com
+    volumeHandle: {{ .Values.efs.handle }}
+---
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  annotations:
+    volume.beta.kubernetes.io/storage-class: "efs-sc"
+    pv.kubernetes.io/bind-completed: "yes"
+    pv.kubernetes.io/bound-by-controller: "yes"
+    volume.beta.kubernetes.io/storage-provisioner: efs.csi.aws.com
+  name: clincard-efs-{{ .Release.Namespace }}-claim
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: {{ default "10Gi" (((.Values.efs).claim).capacityStorage) }}
+  storageClassName: efs-sc
+  volumeMode: Filesystem
+  volumeName: efs-pv-{{ .Release.Namespace }}-claim
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: efs-pv-{{ .Release.Namespace }}-pgp
+spec:
+  capacity:
+    storage: {{ default "10Gi" (((.Values.efs).pgp).capacityStorage) }}
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteMany
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: efs-sc
+  csi:
+    driver: efs.csi.aws.com
+    volumeHandle: {{ printf "%s:%s" .Values.efs.handle (default "/" (((.Values.efs).pgp).path)) }}
+---
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  annotations:
+    volume.beta.kubernetes.io/storage-class: "efs-sc"
+    pv.kubernetes.io/bind-completed: "yes"
+    pv.kubernetes.io/bound-by-controller: "yes"
+    volume.beta.kubernetes.io/storage-provisioner: efs.csi.aws.com
+  name: clincard-efs-{{ .Release.Namespace }}-pgp
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: {{ default "10Gi" (((.Values.efs).pgp).capacityStorage) }}
+  storageClassName: efs-sc
+  volumeMode: Filesystem
+  volumeName: efs-pv-{{ .Release.Namespace }}-pgp
+---
+{{- end }}

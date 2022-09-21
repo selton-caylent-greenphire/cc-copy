@@ -1,0 +1,104 @@
+name: paymentapprovals
+nameOverride: paymentapprovals
+fullnameOverride: paymentapprovals
+secretpath: lower
+
+preHook:
+  enabled: false
+
+service:
+  tier: api
+  image: 160116585046.dkr.ecr.us-east-1.amazonaws.com/clincard/paymentapproval-service:1.4.1
+  # -- Replica count used for paymentapprovals service
+  replicaCount: 2
+  autoscaling:
+    enabled: false
+    minReplicas: 5
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 80
+    targetMemoryUtilizationPercentage: 80
+  readinessProbe:
+    failureThreshold: 3
+    httpGet:
+      path: /swagger.json
+      port: 8080
+      scheme: HTTP
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    successThreshold: 1
+    timeoutSeconds: 10
+  livenessProbe:
+    failureThreshold: 3
+    httpGet:
+      path: /swagger.json
+      port: 8080
+      scheme: HTTP
+    initialDelaySeconds: 30
+    periodSeconds: 30
+    successThreshold: 1
+    timeoutSeconds: 5
+  
+consumer:
+  tier: payments
+  image: 160116585046.dkr.ecr.us-east-1.amazonaws.com/clincard/paymentapproval-consumer:1.4.1
+  # -- Replica count used for paymentapprovals consumer
+  replicaCount: 4
+
+dependencies:
+  # -- Service dependency [paymentevents](https://github.com/Greenphire/clincard-config/tree/uat/charts/clincard/subcharts/paymentevents)
+  paymentevents: paymentevents
+  # -- Secrets service dependency **Rabbit-mq**
+  rabbitmqSecrets: rabbitmq-secrets
+  postgresadmin: postgres-admin
+  # -- Secrets dependency [clincard](https://github.com/Greenphire/clincard-config/tree/uat/charts/clincard)
+  clincardsecrets: clincard-secret
+
+dnsPolicy: ClusterFirst
+restartPolicy: Always
+schedulerName: default-scheduler
+securityContext: {}
+terminationGracePeriodSeconds: 30
+
+volumes:
+  - name: config
+    configMap:
+      defaultMode: 420    
+      name: paymentapprovals
+      items:
+        - key: config.json
+          path: config.json
+
+configMapJson:
+  - dataKey: config.json
+    dataKeyTemplateSrc: "/_configmap.json.tpl"
+    loggerServiceName: paymentapprovals    
+
+serviceAccount:
+  create: false 
+  name: ""
+
+rollingUpdateDeploymentStrategy:
+  enabled: true  
+
+# The below values can be overridden by parent chart global values. 
+# See clincard chart values.yaml file.
+# Start - chart global values
+postgres:
+  image: bitnami/postgresql:11.6.0-debian-9-r0
+
+portaldb:
+  service: portaldb-postgres
+  database: ccportaldatabase
+  username: paymentapprovals
+  db_admin: clincard
+
+db:
+  service: paymentdb-postgres
+  database: paymentapprovals
+  username: paymentapprovals
+  db_admin: clincard
+
+rabbit:
+  username: payments
+  service: rabbit-rabbitmq-ha
+# end - chart global values

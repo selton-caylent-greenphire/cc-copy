@@ -1,0 +1,189 @@
+nameOverride: rideshare
+fullnameOverride: rideshare
+secretpath: lower
+tier: travel
+
+rideshareCelery:
+  tier: backend
+  image: 160116585046.dkr.ecr.us-east-1.amazonaws.com/clincard/rideshare-celery:2.7.0
+  replicaCount: 2
+  autoscaling:
+    enabled: false
+  resources:
+    limits:
+      cpu: 500m
+      memory: 2Gi
+    requests:
+      cpu: 50m
+      memory: 256Mi  
+  configMapJson:
+  - dataKey: config.json
+    dataKeyTemplateSrc: "/_configmap.json.tpl"
+    loggerServiceName: rideshare-celery
+    gunicornBlock: false
+
+rideshareConsumer:
+  tier: consumer
+  image: 160116585046.dkr.ecr.us-east-1.amazonaws.com/clincard/rideshare-consumer:2.7.0
+  replicaCount: 2
+  autoscaling:
+    enabled: false
+  resources:
+    limits:
+      cpu: 500m
+      memory: 250Mi
+    requests:
+      cpu: 100m
+      memory: 75Mi
+
+rideshareService:
+  tier: api
+  image: 160116585046.dkr.ecr.us-east-1.amazonaws.com/clincard/rideshare-service:2.7.0
+  replicaCount: 2
+  autoscaling:
+    enabled: false
+  resources:
+    limits:
+      cpu: 500m
+      memory: 1Gi
+    requests:
+      cpu: 100m
+      memory: 250Mi
+  service:
+    enabled: true  
+    port: 8080      
+    clusterIP: None
+  configMapJson:
+  - dataKey: config.json
+    dataKeyTemplateSrc: "/_configmap.json.tpl"
+    loggerServiceName: ridesharesvc
+    gunicornBlock: true
+    gunicornTimeout: 60
+    gunicornWorkers: 4    
+
+# Start - Environment variables definition
+envs:
+  rideshareFee: "6.0"
+  lyftTimeout: "20"
+  lyftBaseUrl: https://api-sandbox.lyft.net
+  configFilePath: /config/config.json
+  rabbitmqExchange: payments
+  rabbitmqQueue: rideshare_payments
+  rabbitmqRoutingKey: payments.*
+  rabbitmqRetries: "0"
+email:
+  enable: false
+  host: smtp.sendgrid.net
+  user: shawn.milochik@greenphire.com
+  support: clincard@greenphire.com
+  report_distro: accounting@greenphire.com,mason.romano@greenphire.com,greg.ruane@greenphire.com
+media:
+  host: ccdevmedia01.corp.greenphire.net
+  upload_path: /home/media/greenphire_media/reports/
+  user: media
+  base_url: https://ccdevmedia01.corp.greenphire.net:8443/reports
+aws:
+  bucket: cc-sqa-default
+  region: us-east-1
+storage:
+  class: standard
+  size: 8Gi
+websockets:
+  enable: true
+virusscan: 
+  enable: false  
+# End - Environment variables definition
+
+# The below values can be overridden by parent chart global values. 
+# See clincard chart values.yaml file.
+# Start - chart global values
+hosts:
+  ws: ws.clincard.com
+
+couchdb:
+  service: couchdb-ha-svc-couchdb
+  username: admin
+
+postgres:
+  image: bitnami/postgresql:11.6.0-debian-9-r0
+
+db:
+  service: microservicedb-postgres
+  database: rideshare
+  username: rideshare
+  db_admin: clincard
+
+portaldb:
+  service: portaldb-postgres
+  database: ccportaldatabase
+  username: rideshare
+  db_admin: clincard
+
+rabbit:
+  username: payments
+  service: rabbit-rabbitmq-ha
+  
+celery:
+  username: celery
+  service: rabbit-rabbitmq-ha
+# end - chart global values
+
+dependencies:
+  postgresadmin: postgres-admin
+  # -- Service dependency [paymentevents](https://github.com/Greenphire/clincard-config/tree/uat/charts/clincard/subcharts/paymentevents)
+  paymentevents: paymentevents
+  # -- Service dependency [redis](https://github.com/Greenphire/clincard-config/tree/uat/)
+  redis: redis
+  # -- Service dependency [virus-scanning](https://github.com/Greenphire/clincard-config/tree/uat/)
+  virusscanning: virus-scanning
+  # -- Secrets dependency [cc-ssh-key] (https://github.com/Greenphire/clincard-config/tree/uat/charts/clincard/templates)
+  ccsshsecrets: cc-ssh-key
+  # -- Secrets dependency [clincard](https://github.com/Greenphire/clincard-config/tree/uat/charts/clincard)
+  clincardsecrets: clincard-secret
+  # -- Secrets dependency [rabbitsecret](https://github.com/Greenphire/clincard-config/tree/uat/ccuat01/uat/secrets)
+  rabbitsecret: rabbit-secret
+
+dnsPolicy: ClusterFirst
+restartPolicy: Always
+schedulerName: default-scheduler
+securityContext: {}
+terminationGracePeriodSeconds: 30
+
+volumes:
+  ccsshName: cc-ssh
+  ccsshMountPath: /root/.ssh
+  ccsshDefaultMode: 384
+  secretName: cc-ssh-key
+  configName: config
+  configDefaultMode: 420      
+
+readinessProbe:
+  failureThreshold: 3
+  httpGet:
+    path: /swagger.json
+    port: 8080
+    scheme: HTTP
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  successThreshold: 1
+  timeoutSeconds: 5
+
+livenessProbe:
+  failureThreshold: 3
+  httpGet:
+    path: /swagger.json
+    port: 8080
+    scheme: HTTP
+  initialDelaySeconds: 30
+  periodSeconds: 30
+  successThreshold: 1
+  timeoutSeconds: 5
+
+serviceAccount:
+  create: false 
+  name: ""
+
+rollingUpdateDeploymentStrategy:
+  enabled: true
+  maxSurge:
+  maxUnavailable:

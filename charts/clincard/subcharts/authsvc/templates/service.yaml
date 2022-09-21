@@ -1,0 +1,13 @@
+{{- if and .Values.service  .Values.service.enabled}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "authsvc.fullname" . }}
+  labels: {{ include "authsvc.labels" . | nindent 4 }}
+spec:
+  selector: {{ include "authsvc.selectorLabels" . | nindent 4 }}   
+  ports:    
+    - name: {{ default "http" .Values.service.portName | quote }}
+      port: {{ default 8080 .Values.service.port }}      
+{{- end }}

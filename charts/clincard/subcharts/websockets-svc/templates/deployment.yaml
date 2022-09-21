@@ -1,0 +1,114 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "websocketssvc.fullname" . }}
+  labels: {{ include "websocketssvc.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels: {{ include "websocketssvc.selectorLabels" . | nindent 6 }}
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  progressDeadlineSeconds: {{ default 600 .Values.progressDeadlineSeconds  }}
+  revisionHistoryLimit: {{ default 10 .Values.revisionHistoryLimit  }}
+  {{- if .Values.rollingUpdateDeploymentStrategy.enabled }}
+  strategy: 
+    type: RollingUpdate
+    rollingUpdate: {{ include "websocketssvc.rollingUpdateDeploymentStrategy" . | nindent 6 }}
+  {{- end }}
+  template:
+    metadata:
+      labels: {{ include "websocketssvc.selectorLabels" . | nindent 8 }}        
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      initContainers:
+      - name: wait-for-kong
+        image: alpine:3.7
+        command: ["sh", "-c", "apk add curl && until curl --connect-timeout 5 http://{{ .Values.dependencies.kongsvc }}:8001; do sleep 2; done"]
+      containers:
+      - name: {{ include "websocketssvc.fullname" . }}
+        image: {{ .Values.image }}
+        imagePullPolicy: {{ default "IfNotPresent" .Values.imagePullPolicy }}
+        command: ["/bin/bash"]
+        args:
+          - -c
+          - pip install python-logstash git+https://github.com/Greenphire/jslog4kube.git && websocketsvc
+        ports:
+        - containerPort: {{ default 8080 .Values.containerPort }}
+          name: {{ include "websocketssvc.fullname" . }}
+          protocol: {{ default "TCP" .Values.containerPortProtocol }}
+        env:
+        - name: CONFIG_FILE_PATH
+          value: {{ default "/config/config.json" .Values.envConfigFilePath }}
+        - name: KONG_URL
+          value: http://{{ .Values.dependencies.kongsvc }}:8001
+        - name: SERVER_HOST
+          value: {{ default "0.0.0.0" .Values.envServerHost }} 
+        - name: SERVER_PORT
+          value: {{ default "5678" .Values.envServerPort | quote }}
+        - name: WEBSOCKET_SECRET
+          valueFrom:
+            secretKeyRef:
+              key: websocket-secret
+              name: {{ template "websocketssvc.fullname" . }}        
+        {{- with .Values.readinessProbe }}
+        readinessProbe:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        {{- with .Values.livenessProbe }}
+        livenessProbe:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        resources:
+          limits:
+            cpu: {{ default "256m" .Values.resourcesLimitsCpu }}
+            memory: {{ default "512Mi" .Values.resourcesLimitsMemory }}
+          requests:
+            cpu: {{ default "10m" .Values.resourcesRequestsCpu }}
+            memory: {{ default "128Mi" .Values.resourcesRequestsMemory }}
+        terminationMessagePath: {{ default "/dev/termination-log" .Values.containersTerminationMessagePath}}
+        terminationMessagePolicy: {{ default "File" .Values.containersTerminationMessagePolicy}}
+        volumeMounts:
+        - mountPath: {{ default "/config" .Values.containersVolumeMountsMountPath}}
+          name: {{ default "config" .Values.containersVolumeMountsName}}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "websocketssvc.serviceAccountName" . }}
+      {{- with .Values.securityContext }}
+      securityContext:
+        {{- toYaml .Values.securityContext | nindent 8 }}
+      {{- end }}      
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.dnsPolicy }}
+      dnsPolicy: {{ .Values.dnsPolicy }}
+      {{- end }}
+      {{- if .Values.restartPolicy }}
+      restartPolicy: {{ .Values.restartPolicy }}
+      {{- end }}
+      {{- if .Values.schedulerName }}
+      schedulerName: {{ .Values.schedulerName }}
+      {{- end }}
+      {{- if .Values.terminationGracePeriodSeconds }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      {{- end }}
+      {{- with .Values.volumes }}
+      volumes:
+        {{- toYaml . | nindent 6 }}
+      {{- end }}

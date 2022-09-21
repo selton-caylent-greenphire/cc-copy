@@ -1,0 +1,66 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels: {{ include "taxablereport.labels" . | nindent 4 }}
+    tier: {{ .Values.consumer.tier }}
+  name: {{ template "taxablereport.consumer.fullname" . }}
+spec:
+  progressDeadlineSeconds: {{ default 600 .Values.consumer.progressDeadlineSeconds }}
+  replicas: {{ .Values.consumer.replicas }}
+  revisionHistoryLimit: {{ default 10 .Values.consumer.revisionHistoryLimit }}
+  selector:
+    matchLabels:
+      app: {{ template "taxablereport.consumer.fullname" . }}
+      tier: {{ .Values.consumer.tier }}
+  strategy:
+    rollingUpdate:
+      maxSurge: {{ .Values.consumer.rollingUpdate.maxSurge }}
+      maxUnavailable: {{ .Values.consumer.rollingUpdate.maxUnavailable }}
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: {{ template "taxablereport.consumer.fullname" . }}
+        tier: {{ .Values.consumer.tier }}
+    spec:
+      initContainers: {{ include (print .Template.BasePath "/_deployment_initcontainers.yaml.tpl") . | nindent 8 }}
+      containers:
+      - args:
+        - -c
+        - pip install python-logstash && taxablereport-consumer
+        command:
+        - /bin/bash
+        env:
+{{ include (print .Template.BasePath "/_commons_env.yaml.tpl" ) . |  indent 8 }}
+        - name: MB_PREFETCH_COUNT
+          value: {{ default "1" (.Values.env).MB_PREFETCH_COUNT | quote }}
+        - name: DECRYPTION_KEY
+          valueFrom:
+            secretKeyRef:
+              key: decryptionkey
+              name: {{ .Values.dependencies.paymentindex }}
+        - name: PORTALDB_PASS
+          valueFrom:
+            secretKeyRef:
+              key: postgres-{{ include "portaldb_pusr" . }}
+              name: {{ .Values.dependencies.clincardsecrets }}
+        - name: CLINCARD_DB_URI
+          value: {{ printf "postgresql://%s:$(PORTALDB_PASS)@%s.%s/%s" (include "portaldb_pusr" .) (include "portaldb_psvc" .) .Release.Namespace (include "portaldb_pdb" .) }}
+        image: {{ .Values.consumer.image }}
+        imagePullPolicy: IfNotPresent
+        name: {{ template "taxablereport.consumer.fullname" . }}
+        resources:
+          limits:
+            cpu: "{{ .Values.consumer.resources.limits.cpu }}"
+            memory: "{{ .Values.consumer.resources.limits.memory }}"
+          requests:
+            cpu: "{{ .Values.consumer.resources.requests.cpu }}"
+            memory: "{{ .Values.consumer.resources.requests.memory }}"
+        volumeMounts:
+        - mountPath: {{ default "/config" .Values.containersVolumeMountsMountPath}}
+          name: {{ default "config" .Values.containersVolumeMountsName}}
+      {{- with .Values.volumes }}
+      volumes:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "taxablereport.serviceAccountName" . }}

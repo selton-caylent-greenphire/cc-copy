@@ -1,0 +1,23 @@
+{{- if .Values.clamav.enabled }}
+{{- if and .Values.clamav.service  .Values.clamav.service.enabled}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "antivir.clamav.name" . }}
+  labels: {{ include "antivir.labels" . | nindent 4 }}
+    component: {{ include "antivir.clamav.name" . }}
+spec:
+  selector: {{ include "antivir.selectorLabels" . | nindent 4 }}
+    component: {{ include "antivir.clamav.name" . }}
+  clusterIP: {{ default "None" .Values.clamav.service.clusterIP }}   
+  ports:    
+    - name: {{ default "tcp" .Values.clamav.service.portName | quote }}
+      port: {{ default 3310 .Values.clamav.service.port }}      
+  sessionAffinity: {{ default "None" .Values.clamav.service.sessionAffinity }}
+  {{- if .Values.clamav.service.sessionAffinityConfig }}
+  sessionAffinityConfig:
+{{ toYaml .Values.clamav.service.sessionAffinityConfig | trim | indent 4 }}    
+  {{- end }}
+{{- end }}
+{{- end }}

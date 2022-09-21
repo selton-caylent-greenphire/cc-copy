@@ -1,0 +1,69 @@
+{{- if .Values.i2cForexProcessorCorrections.enabled }}
+{{- $cronjob := .Values.i2cForexProcessorCorrections}}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ $cronjob.name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    component: {{ $cronjob.name }}
+{{ include "cronjobs.labels" . | indent 4 }}
+spec:
+  successfulJobsHistoryLimit: {{ default .Values.historyLimits.successfulJobsHistoryLimit $cronjob.successfulJobsHistoryLimit }}
+  failedJobsHistoryLimit: {{ default .Values.historyLimits.failedJobsHistoryLimit $cronjob.failedJobsHistoryLimit }}
+  concurrencyPolicy: {{ default .Values.concurrencyPolicy $cronjob.concurrencyPolicy }}  
+  schedule: {{ $cronjob.schedule | quote }}
+  suspend: {{ default .Values.suspend $cronjob.suspend }}
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: {{ default "task" $cronjob.containersName }}
+            image: {{ default .Values.image $cronjob.image}}
+            imagePullPolicy: {{ default .Values.imagePullPolicy $cronjob.imagePullPolicy}}
+            args: {{ toJson $cronjob.args }}
+            env:              
+{{ include (print .Template.BasePath "/_commons_env.yaml.tpl" ) . |  indent 14 }}
+{{- range $key, $value := $cronjob.customEnv }}
+              - name: {{ $key }}
+                value: {{ $value | quote }}
+{{- end }}
+              - name: I2C_FOREX_USER
+                valueFrom:
+                  secretKeyRef:
+                    key: xfr-user
+                    name: {{ .Values.dependencies.clincardsecrets }}
+              - name: I2C_FOREX_PASSWORD
+                valueFrom:
+                  secretKeyRef:
+                    key: xfr-cred
+                    name: {{ .Values.dependencies.clincardsecrets }}
+            resources:
+              limits:
+                cpu: {{ default .Values.resources.limits.cpu $cronjob.resourcesLimitsCpu }}
+                memory: {{ default .Values.resources.limits.memory $cronjob.resourcesLimitsMemory }}
+              requests:
+                cpu: {{ default .Values.resources.requests.cpu $cronjob.resourcesRequestsCpu }}
+                memory: {{ default .Values.resources.requests.memory $cronjob.resourcesRequestsMemory }}
+            volumeMounts:
+            - mountPath: {{ .Values.volumes.dataMountPath }}
+              name: {{ .Values.volumes.dataName }}
+            - mountPath: {{ .Values.volumes.ccSshMountPath }}
+              name: {{ .Values.volumes.ccSshName }}
+          restartPolicy: {{ default .Values.restartPolicy $cronjob.restartPolicy}}
+          schedulerName: {{ default .Values.schedulerName $cronjob.schedulerName}}
+          {{- with $cronjob.securityContext }}
+          securityContext:
+          {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumes:
+          - name: {{ .Values.volumes.dataName }}
+            persistentVolumeClaim:
+              claimName: {{ printf (.Values.volumes.dataClaim) $.Release.Namespace }}
+          - name: {{ .Values.volumes.ccSshName }}
+            secret:
+              defaultMode: {{ .Values.volumes.ccSshDefaultMode }}
+              secretName: {{ .Values.dependencies.ccsshsecrets }}
+{{- end }}

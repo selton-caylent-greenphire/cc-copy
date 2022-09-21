@@ -1,0 +1,23 @@
+{{- if .Values.scanner.enabled }}
+{{- if and .Values.scanner.service  .Values.scanner.service.enabled }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "antivir.scanner.name" . }}
+  labels: {{ include "antivir.labels" . | nindent 4 }}
+    component: {{ include "antivir.scanner.name" . }}
+spec:
+  selector: {{ include "antivir.selectorLabels" . | nindent 4 }}
+    component: {{ include "antivir.scanner.name" . }}
+  clusterIP: {{ default "None" .Values.scanner.service.clusterIP }}   
+  ports:    
+    - name: {{ default "tcp" .Values.scanner.service.portName | quote }}
+      port: {{ default 3320 .Values.scanner.service.port }}      
+  sessionAffinity: {{ default "None" .Values.scanner.service.sessionAffinity }}
+  {{- if .Values.scanner.service.sessionAffinityConfig }}
+  sessionAffinityConfig:
+{{ toYaml .Values.scanner.service.sessionAffinityConfig | trim | indent 4 }}    
+  {{- end }}
+{{- end }}
+{{- end }}

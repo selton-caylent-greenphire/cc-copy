@@ -1,0 +1,79 @@
+name: datasupport
+nameOverride: datasupport
+fullnameOverride: datasupport
+secretpath: lower
+tier: api
+enabled: false
+
+image: 160116585046.dkr.ecr.us-east-1.amazonaws.com/clincard/datasupport:0.5.1
+
+replicas: 1
+resources:
+  limits:
+    cpu: 150m
+    memory: 500Mi
+  requests:
+    cpu: 10m
+    memory: 64M
+
+readinessProbe:
+  failureThreshold: 3
+  httpGet:
+    path: /
+    port: 5000
+    scheme: HTTP
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  successThreshold: 1
+  timeoutSeconds: 5
+
+configMapJson:
+- dataKey: config.json
+  dataKeyTemplateSrc: "/_configmap.json.tpl"
+  loggerServiceName: datasupport
+  gunicornBlock: false
+
+ingressClass: nginx
+
+service:
+  enabled: true
+  port: 5000      
+  clusterIP: None
+
+serviceAccount:
+  create: true
+
+rollingUpdateDeploymentStrategy:
+  enabled: true  
+
+volumes:
+  configName: config
+  configDefaultMode: 420
+
+customEnv:
+  CONFIG_FILE_PATH: /config/config.json
+  FIS_DEV_PCI_HOST: 10.150.17.181
+  DEPLOY_JOBS_TO_K8S: "1"  
+
+dependencies:
+  # -- Secrets dependency [clincard](https://github.com/Greenphire/clincard-config/tree/uat/charts/clincard)
+  clincardsecrets: clincard-secret
+  # -- Service dependency [rideshare](https://github.com/Greenphire/clincard-config/tree/uat/charts/clincard/subcharts/rideshare)
+  ridesharesvc: rideshare-svc
+  # -- Service dependency [redis](https://github.com/Greenphire/clincard-config/tree/uat/)
+  redis: redis
+
+# The below values can be overridden by parent chart global values.
+# See clincard chart values.yaml file.
+portaldb:
+  service: portaldb-postgres
+  database: ccportaldatabase
+  username: datasupport
+  db_admin: clincard
+
+postgres:
+  image: bitnami/postgresql:11.6.0-debian-9-r0
+
+hosts:
+  datasupport: datasupport.clincard.com
+  xfr_host: 10.25.23.28

@@ -1,0 +1,89 @@
+{{- if .Values.cbOrderMonitoring.enabled }}
+{{- $cronjob := .Values.cbOrderMonitoring}}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ $cronjob.name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    component: {{ $cronjob.name }}
+{{ include "cronjobs.labels" . | indent 4 }}
+spec:
+  successfulJobsHistoryLimit: {{ default .Values.historyLimits.successfulJobsHistoryLimit $cronjob.successfulJobsHistoryLimit }}
+  failedJobsHistoryLimit: {{ default .Values.historyLimits.failedJobsHistoryLimit $cronjob.failedJobsHistoryLimit }}
+  concurrencyPolicy: {{ default .Values.concurrencyPolicy $cronjob.concurrencyPolicy }}  
+  schedule: {{ $cronjob.schedule | quote }}
+  suspend: {{ default .Values.suspend $cronjob.suspend }}
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: {{ default "task" $cronjob.containersName }}
+            image: {{ default .Values.image $cronjob.image}}
+            imagePullPolicy: {{ default .Values.imagePullPolicy $cronjob.imagePullPolicy}}
+            args: {{ toJson $cronjob.args }}
+            env:
+{{ include (print .Template.BasePath "/_commons_env.yaml.tpl" ) . |  indent 14 }}
+{{ include (print .Template.BasePath "/_commons_jira_env.yaml.tpl" ) . |  indent 14 }}
+{{ include (print .Template.BasePath "/_commons_password_manager_env.yaml.tpl" ) . |  indent 14 }}
+{{- range $key, $value := $cronjob.customEnv }}
+              - name: {{ $key }}
+                value: {{ $value | quote }}
+{{- end }}
+              - name: RABBIT_PASS
+                valueFrom:
+                  secretKeyRef:
+                    key: rabbit_userpass
+                    name: {{ .Values.dependencies.clincardsecrets }}
+              - name: CELERY_RABBITMQ_URL
+                value: {{ printf "amqp://%s:$(RABBIT_PASS)@%s.%s:5672/celery" (include "cel_usr" .) (include "cel_svc" .) .Release.Namespace }}
+            resources:
+              limits:
+                cpu: {{ default .Values.resources.limits.cpu $cronjob.resourcesLimitsCpu }}
+                memory: {{ default .Values.resources.limits.memory $cronjob.resourcesLimitsMemory }}
+              requests:
+                cpu: {{ default .Values.resources.requests.cpu $cronjob.resourcesRequestsCpu }}
+                memory: {{ default .Values.resources.requests.memory $cronjob.resourcesRequestsMemory }}
+            volumeMounts:
+            - mountPath: {{ .Values.volumes.mediaMountPath }}
+              name: {{ .Values.volumes.mediaName }}
+            - mountPath: {{ .Values.volumes.dataMountPath }}
+              name: {{ .Values.volumes.dataName }}
+            - mountPath: {{ .Values.volumes.mediaUploadMountPath }}
+              name: {{ .Values.volumes.mediaUploadName }}
+            - mountPath: {{ .Values.volumes.ccSshMountPath }}
+              name: {{ .Values.volumes.ccSshName }}
+            - mountPath: {{ .Values.volumes.pmpMountPath }}
+              name: {{ .Values.volumes.pmpName }}
+          hostAliases:
+{{- range $cronjob.hostAliases }}
+          - hostnames: {{ .names | toYaml | nindent 12 }}
+            ip: {{ .ip }}
+{{- end }}
+          restartPolicy: {{ default .Values.restartPolicy $cronjob.restartPolicy}}
+          schedulerName: {{ default .Values.schedulerName $cronjob.schedulerName}}
+          {{- with $cronjob.securityContext }}
+          securityContext:
+          {{- toYaml . | nindent 12 }}
+          {{- end }} 
+          volumes:
+          - name: {{ .Values.volumes.mediaName }}
+            persistentVolumeClaim:
+              claimName: {{ printf (.Values.volumes.mediaClaim) $.Release.Namespace }}
+          - name: {{ .Values.volumes.mediaUploadName }}
+            persistentVolumeClaim:
+              claimName: {{ printf (.Values.volumes.mediaUploadClaim) $.Release.Namespace }}
+          - name: {{ .Values.volumes.dataName }}
+            persistentVolumeClaim:
+              claimName: {{ printf (.Values.volumes.dataClaim) $.Release.Namespace }}
+          - name: {{ .Values.volumes.ccSshName }}
+            secret:
+              defaultMode: {{ .Values.volumes.ccSshDefaultMode }}
+              secretName: {{ .Values.dependencies.ccsshsecrets }}
+          - name: {{ .Values.volumes.pmpName }}
+            secret:
+              defaultMode: {{ .Values.volumes.pmpDefaultMode }}
+              secretName: {{ .Values.dependencies.passmanagersecrets }}
+{{- end }}

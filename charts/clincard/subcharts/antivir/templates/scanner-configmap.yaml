@@ -1,0 +1,15 @@
+{{- if .Values.scanner.enabled }}
+{{ if .Values.scanner.configMapJson }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "antivir.scanner.name" . }}
+  labels: {{ include "antivir.labels" . | nindent 4 }}
+    component: {{ include "antivir.scanner.name" . }} 
+data:
+  {{- range .Values.scanner.configMapJson }}
+  {{ .dataKey }}: {{ include (print $.Template.BasePath .dataKeyTemplateSrc ) . | toYaml | indent 4 }}
+  {{- end }}  
+{{- end }}
+{{- end }}

@@ -1,0 +1,17 @@
+{{ if and .Values.service .Values.externalService }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.name }}-lb
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ .Values.name }}
+spec:
+  ports:
+  - name: {{ .Values.name }}
+    port: {{ .Values.port }}
+  type: NodePort
+  selector:
+    app: {{ .Values.name }}
+{{ end }}

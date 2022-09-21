@@ -1,0 +1,12 @@
+apiVersion: v2
+appVersion: "1.0"
+description: A Helm chart deploying Redis in ClinCard - This is temporal while the code is updated to work with AWS Redis and SSL.
+name: redis
+version: 0.1.5
+maintainers:
+- name: Helene McElroy
+  email: helene.mcelroy@greenphire.com
+- name: Jeisson Osorio
+  email: jeisson.osorio@greenphire.com
+keywords:  
+  - redis

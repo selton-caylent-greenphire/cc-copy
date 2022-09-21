@@ -1,0 +1,108 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels: {{ include "paymentprocessor.labels" . | nindent 4 }}
+    tier: {{ .Values.tier }}
+  name: {{ template "paymentprocessor.fullname" . }}
+spec:
+  progressDeadlineSeconds: {{ default 600 .Values.progressDeadlineSeconds }}
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  revisionHistoryLimit: {{ default 10 .Values.revisionHistoryLimit }}
+  selector:
+    matchLabels:
+      app: {{ template "paymentprocessor.name" . }}
+      tier: {{ .Values.tier }}
+  strategy:
+    rollingUpdate:
+      maxSurge: {{ .Values.rollingUpdate.maxSurge }}
+      maxUnavailable: {{ .Values.rollingUpdate.maxUnavailable }}
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: {{ template "paymentprocessor.name" . }}
+        tier: {{ .Values.tier }}
+    spec:
+      initContainers:
+      - name: wait-for-paymentdomain
+        image: alpine/curl
+        command: ["sh", "-c", "until curl --fail --connect-timeout 5 http://{{ .Values.dependencies.paymentdomain}}.{{ .Release.Namespace}}:8080/swagger.json; do sleep 2; done"]
+      - name: wait-for-paymentevents
+        image: alpine/curl
+        command: ["sh", "-c", "until curl --fail --connect-timeout 5 http://{{ .Values.dependencies.paymentevents}}.{{ .Release.Namespace}}:8080/swagger.json; do sleep 2; done"]
+      containers:
+      - args:
+        - -c
+        - pip install python-logstash git+https://github.com/Greenphire/jslog4kube.git
+          && payment-processor
+        command:
+        - /bin/bash
+        env: {{ include "opentelemetry_envs" . | nindent 8 -}}
+        - name: DEBUG
+          value: "True"
+        - name: APILAYER_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              key: apilayer_access_key
+              name: {{ .Values.dependencies.clincardsecrets }}
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: postgres-{{ include "pusr" . }}
+              name: {{ template "paymentprocessor.fullname" . }}
+        - name: DB_URI
+          value: {{ printf "postgresql://%s:$(DB_PASSWORD)@%s.%s/%s" (include "pusr" .) (include "psvc" .) .Release.Namespace (include "pdb" .) }}
+        - name: RABBIT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: payments
+              name: {{ .Values.dependencies.rabbitsecrets }}
+        - name: RABBITMQ_RETRIES
+          value: "3"
+        - name: DECRYPTION_KEY
+          valueFrom:
+            secretKeyRef:
+              key: decryptionkey
+              name: {{ .Values.dependencies.paymentindexsecrets }}
+        - name: RABBITMQ_URL
+          value: {{ printf "amqp://%s:$(RABBIT_PASSWORD)@%s.%s:5672/" (include "rmq_usr" .) ( include "rmq_svc" .) .Release.Namespace }}
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: redis-password
+              name: {{ .Values.dependencies.redissecrets }}
+        {{- if .Values.jira.enabled }}
+        - name: JIRA_USER_EMAIL
+          value: {{ .Values.jira.user }}
+        - name: JIRA_API_TOKEN
+          valueFrom:
+            secretKeyRef:
+                key: jira_api_token
+                name: {{ .Values.dependencies.clincardsecrets }}
+        {{- end }}
+        image: {{ .Values.image }}
+        imagePullPolicy: Always
+        name: process-payments
+        {{- with .Values.resources }}
+        resources:
+          {{- . | toYaml | nindent 10}}
+        {{- end }}
+        {{- with .Values.volumeMounts }}
+        volumeMounts:
+          {{- . | toYaml | nindent 10 }}
+        {{- end }}
+      {{- with .Values.hostAliases }}
+      hostAliases:
+        {{- . | toYaml | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "paymentprocessor.serviceAccountName" . }}
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext: {}
+      terminationGracePeriodSeconds: 30
+      {{- with .Values.volumes }}
+      volumes:
+        {{- . | toYaml | nindent 8 }}
+      {{- end }}

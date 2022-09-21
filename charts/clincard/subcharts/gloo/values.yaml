@@ -1,0 +1,33 @@
+name: gloo-edge
+nameOverride: gloo-edge
+fullnameOverride: gloo-edge
+
+gloo_namespace: gloo-system
+
+ingress:
+  enabled: false
+  gateway: gateway-proxy
+  port: 80
+  path: /
+
+hosts:
+  apigateway: "" 
+
+virtualservice:
+  enabled: true
+  swaggerui:
+    enabled: false
+
+dependencies:
+  studysvc:
+    name: study-svc
+    port: 8080
+  subjectsvc:
+    name: subject-svc
+    port: 8080
+  eprosvc:
+    name: epro-svc
+    port: 8080
+  swaggerui:
+    name: swagger-ui
+    port: 8080

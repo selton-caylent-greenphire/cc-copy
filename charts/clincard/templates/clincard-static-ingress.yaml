@@ -1,0 +1,35 @@
+---
+{{- if .Values.clincardstatic.enable }}
+{{- $deployment := .Values.clincardstatic }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  labels: {{ include "service.labels" . | nindent 4 }}
+    component: {{ template "service.static.fullname" . }}
+    tier: {{ default .Values.tier $deployment.tier }}
+  name: {{ template "service.static.fullname" . }}
+  annotations:
+    ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/enable-cors: {{ .Values.ingress.enableCors | quote }}
+    nginx.ingress.kubernetes.io/cors-allow-origin: "*.{{ include "hosts_domain" . }}"
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      proxy_set_header X-SSL-Protocol $ssl_protocol;
+      proxy_set_header X-Scheme $scheme;      
+spec:
+  ingressClassName: {{ default "nginx" .Values.ingress.class }}
+  rules:
+  - host: {{ include "hosts_static" . }}
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: {{ template "service.static.fullname" . }}
+            port:
+              number: {{ default 80 $deployment.service.port }}
+  tls:
+  - secretName: {{ .Values.ingress.tlsSecretName }}
+    hosts:
+    - {{ include "hosts_static" . }}
+{{- end }}

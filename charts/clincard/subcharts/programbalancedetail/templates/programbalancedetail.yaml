@@ -1,0 +1,186 @@
+{{- $pusr := get (include "portaldb" . | fromJson) "username" -}}
+{{- $psvc := get (include "portaldb" . | fromJson) "service" -}}
+{{- $pdb := get (include "portaldb" . | fromJson) "database" -}}
+{{- $pdb_adm := get (include "portaldb" . | fromJson) "db_admin" -}}
+{{- $csvc := get (include "couchdb" . | fromJson) "service" -}}
+{{- $dbpbdr := get (include "couchdb" . | fromJson) "db_pbdr" -}}
+{{- $cusr := get (include "couchdb" . | fromJson) "user" -}}
+{{- $rmq_usr := get (include "rabbit" . | fromJson) "username" }}
+{{- $rmq_svc := get (include "rabbit" . | fromJson) "service" }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: {{ template "programbalancedetail.name" . }}
+    component: {{ template "programbalancedetail.fullname" . }}
+    release: {{ .Release.Name }}
+    tier: {{ .Values.tier }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    heritage: {{ .Release.Service }}
+  name: {{ template "programbalancedetail.fullname" . }}
+spec:
+  progressDeadlineSeconds: 600
+  replicas: {{ .Values.resources.service.replicas }}
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app: {{ template "programbalancedetail.name" . }}
+      component: {{ template "programbalancedetail.fullname" . }}
+      release: {{ .Release.Name }}
+      tier: {{ .Values.tier }}
+  strategy:
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app: {{ template "programbalancedetail.name" . }}
+        component: {{ template "programbalancedetail.fullname" . }}
+        release: {{ .Release.Name }}
+        tier: {{ .Values.tier }}
+    spec:
+      initContainers:
+        #- name: wait-for-rideshare-svc
+        #image: alpine:3.7
+        #command: ["sh", "-c", "apk add curl && until curl --fail --connect-timeout 5 http://{{ .Values.dependencies.ridesharesvc}}.{{ .Release.Namespace}}:8080/swagger.json; do sleep 2; done"]
+      - name: wait-for-portal
+        image: {{ include "pgimage" . }}
+        command: ['sh', '-c', 'until psql -d {{ $pdb}} -h {{ $psvc }}.{{ .Release.Namespace }} -U {{ $pusr }} postgres -v ON_ERROR_STOP=1; do echo waiting for database; sleep 2; done;']
+        env:
+        - name: PGPASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: admin-portaldb-{{ $pdb_adm }}
+              name: postgres-admin
+      - name: create-portaldb-user
+        image: {{ include "pgimage" . }}
+        env: {{ include "opentelemetry_envs" . | nindent 8 -}}
+        - name: PGPASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: admin-portaldb-{{ $pdb_adm }}
+              name: postgres-admin
+        - name: PGSVCPASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: postgres-{{ $pusr }}
+              name: {{ template "programbalancedetail.fullname" . }}
+        command: ["sh", "-c"]
+        args:
+          - |
+            psql -h {{ $psvc}}.{{ .Release.Namespace }} -U {{ $pdb_adm }} -d postgres -v "ON_ERROR_STOP=1" << EOF
+            DO
+            \$\$
+            BEGIN
+              IF NOT EXISTS (
+                SELECT FROM pg_catalog.pg_roles
+                WHERE  rolname = '{{ $pusr }}')
+              THEN
+                CREATE ROLE {{ $pusr }} LOGIN PASSWORD '$(PGSVCPASSWORD)';
+                GRANT ALL ON DATABASE {{ $pdb }} TO {{ $pusr }};
+                GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO {{ $pusr }};
+                GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO {{ $pusr }};
+              END IF;
+            END
+            \$\$;
+            EOF
+      - name: wait-for-couchdb
+        image: alpine:3.7
+        command: ["sh", "-c", "apk add curl && until curl --fail --connect-timeout 5 http://{{ $csvc}}.{{ .Release.Namespace}}:5984/_up; do sleep 2; done"]
+      containers:
+      - args:
+        - -c
+        - pip install python-logstash git+https://github.com/Greenphire/jslog4kube.git
+          && programbalancedetail-service
+        command:
+        - /bin/bash
+        env:
+        - name: XLSX_TMP_DIR
+          value: /tmp
+        - name: DB_PASS
+          valueFrom:
+            secretKeyRef:
+              key: postgres-{{ $pusr }}
+              name: {{ template "programbalancedetail.fullname" . }}
+        - name: CLINCARD_DB_URI
+          value: {{ printf "postgresql://%s:$(DB_PASS)@%s.%s/%s" $pusr $psvc .Release.Namespace $pdb }}
+        - name: CONFIG_FILE_PATH
+          value: /config/config.json
+        - name: COUCH_URL
+          value: {{ printf "http://%s.%s:5984/" $csvc .Release.Namespace }}
+        - name: COUCH_DB
+          value: {{ $dbpbdr }}
+        - name: COUCH_USER
+          value: {{ $cusr }}
+        - name: COUCH_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: password
+              name: couchdb-secret
+        - name: RIDESHARE_SWAGGER
+          value: http://{{ .Values.dependencies.ridesharesvc}}.{{ .Release.Namespace}}:8080/swagger.json
+        image: {{ .Values.images.service }}
+        imagePullPolicy: IfNotPresent
+        name: programbalancedetail
+        ports:
+        - containerPort: 8080
+          name: pbdr
+          protocol: TCP
+        readinessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /swagger.json
+            port: 8080
+            scheme: HTTP
+          initialDelaySeconds: 3
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 2
+        resources:
+          limits:
+            cpu: {{ .Values.resources.service.limits.cpu}}
+            memory: {{ .Values.resources.service.limits.memory}}
+          requests:
+            cpu: {{ .Values.resources.service.requests.cpu}}
+            memory: {{ .Values.resources.service.requests.memory}}
+        terminationMessagePath: /dev/termination-log
+        terminationMessagePolicy: File
+        volumeMounts:
+        - mountPath: /config
+          name: config
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      schedulerName: default-scheduler
+      securityContext: {}
+      terminationGracePeriodSeconds: 30
+      volumes:
+      - configMap:
+          defaultMode: 420
+          items:
+          - key: config.json
+            path: config.json
+          name: programbalancedetail
+        name: config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: {{ template "programbalancedetail.name" . }}
+    component: {{ template "programbalancedetail.fullname" . }}
+    release: {{ .Release.Name }}
+    tier: {{ .Values.tier }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    heritage: {{ .Release.Service }}
+  name: {{ template "programbalancedetail.fullname" . }}
+spec:
+  clusterIP: None
+  ports:
+    - port: 8080
+  selector:
+    app: {{ template "programbalancedetail.name" . }}
+    component: {{ template "programbalancedetail.fullname" . }}
+    release: {{ .Release.Name }}
+    tier: {{ .Values.tier }}

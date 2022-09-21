@@ -1,0 +1,15 @@
+{{ if .Values.configMapEnvVarsJson }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "ccadmin.envvars" . }}
+  labels: {{ include "ccadmin.envvars.labels" . | nindent 4 }} 
+data:
+  env.json: |-
+    {
+      "production": {{ .Values.configMapEnvVarsJson.production }},
+      "apiUrl": "https://{{ include "hosts_api" .}}",
+      "authenticationUrl": "https://{{ include "hosts_cc" . }}",
+      "clincardUrl": "https://{{ include "hosts_cc" . }}"
+    }  
+{{- end }}

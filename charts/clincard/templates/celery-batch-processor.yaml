@@ -1,0 +1,128 @@
+{{- if .Values.celerybatchprocessor.enabled }}
+{{- $deployment := .Values.celerybatchprocessor }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "service.cbp.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+  labels: {{ include "service.labels" . | nindent 4 }}
+    component: {{ template "service.cbp.fullname" . }}  
+    tier: {{ default "base" .Values.tierBase }}
+spec:
+  progressDeadlineSeconds: {{ $deployment.progressDeadlineSeconds}}
+  replicas: {{ default 1 $deployment.replicas }}
+  revisionHistoryLimit: {{ default 10 $deployment.revisionHistoryLimit }}
+  selector:
+    matchLabels: {{ include "service.selectorLabels" . | nindent 6 }}
+      component: {{ template "service.cbp.fullname" . }}
+      tier: {{ default "base" .Values.tierBase }}
+  strategy:
+    rollingUpdate:
+      maxSurge: {{ default "50%" $deployment.strategyMaxSurge }}
+      maxUnavailable: {{ default "20%" $deployment.strategyMaxUnavailable }}
+    type: {{ default "RollingUpdate" $deployment.strategyType }} 
+  template:
+    metadata:
+      labels: {{ include "service.selectorLabels" . | nindent 8 }}
+        component: {{ template "service.cbp.fullname" . }}
+        tier: {{ default "base" .Values.tierBase }}
+    spec:
+      initContainers:
+      - name: wait-for-database
+        env:
+        - name: PGPASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: admin-portaldb-{{ include "pdb_adm" . }}
+              name: postgres-admin
+        image: {{ include "pgimage" . }}
+        command: ['sh', '-c', 'until pg_isready -h {{ include "psvc" . }}.{{ .Release.Namespace }} -U {{ include "pusr" . }} -d {{ include "pdb" . }}; do echo waiting for database; sleep 2; done;']
+      - name: wait-for-configsvc
+        image: alpine:3.7
+        command: ["sh", "-c", "apk add curl && until curl --fail --connect-timeout 5 http://{{ .Values.dependencies.configsvc}}.{{ .Release.Namespace}}:8080/swagger.json; do sleep 2; done"]
+      - name: wait-for-paymentevents
+        image: alpine:3.7
+        command: ["sh", "-c", "apk add curl && until curl --fail --connect-timeout 5 http://{{ .Values.dependencies.paymentevents}}.{{ .Release.Namespace}}:8080/swagger.json; do sleep 2; done"]
+      - name: wait-for-paymentdomain
+        image: alpine:3.7
+        command: ["sh", "-c", "apk add curl && until curl --fail --connect-timeout 5 http://{{ .Values.dependencies.paymentdomain}}.{{ .Release.Namespace}}:8080/swagger.json; do sleep 2; done"]
+      containers:
+      - args:
+        - celery
+        - -A
+        - web.celery_worker:app
+        - worker
+        - -l
+        - info
+        - -Q
+        - batch_processor
+        env:
+        - name: RABBIT_CELERY_PASS
+          valueFrom:
+            secretKeyRef:
+              key: celery
+              name: {{ .Values.dependencies.rabbitsecrets }}
+        - name: CELERY_RABBITMQ_URL
+          # value: {{ printf "amqp://%s:$(RABBIT_CELERY_PASS)@%s.%s:5672/celery" (include "cel_usr" .) (include "cel_svc" .) .Release.Namespace }}
+          value: {{ printf "%s://%s:$(RABBIT_CELERY_PASS)@%s:%s/celery" (include "cel_protocol" .) (include "cel_usr" .) (include "cel_host" .) (include "cel_port" .) }}
+        - name: CELERY_RABBITMQ_BACKEND_URL
+          value: {{ printf "%s://%s:$(RABBIT_CELERY_PASS)@%s:%s/celery" (include "cel_backend_protocol" .) (include "cel_usr" .) (include "cel_host" .) (include "cel_port" .) }}
+        - name: CONFIG_SERVICE_SWAGGER
+          value: http://{{ .Values.dependencies.configsvc }}.{{ .Release.Namespace }}:8080/swagger.json
+        - name: DB_NAME
+          value: {{ include "pdb" . }}
+        - name: DB_HOST
+          value: {{ printf "%s.%s" (include "psvc" .) .Release.Namespace }}
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: postgres-{{ include "pusr" . }}
+              name: {{ template "service.secret" . }}
+        - name: DB_USER
+          value: {{ include "pusr" . }}
+        - name: DEBUG
+          value: {{ ternary "True" "False" .Values.global.enableDebug | quote }}
+        - name: PAYMENT_DOMAIN_SWAGGER
+          value: http://{{ .Values.dependencies.paymentdomain }}.{{ .Release.Namespace }}:8080/swagger.json
+        - name: PAYMENT_EVENTS_SWAGGER
+          value: http://{{ .Values.dependencies.paymentevents }}.{{ .Release.Namespace }}:8080/swagger.json
+        - name: PAYMENT_APPROVAL_SWAGGER
+          value: http://{{ .Values.dependencies.paymentapprovals}}.{{ .Release.Namespace }}:8080/swagger.json
+        - name: RABBIT_PASS
+          valueFrom:
+            secretKeyRef:
+              key: payments
+              name: {{ .Values.dependencies.rabbitsecrets }}
+        - name: RABBITMQ_URL
+          # value: {{ printf "amqp://%s:$(RABBIT_PASS)@%s.%s:5672/" (include "rmq_usr" .) (include "rmq_svc" .) .Release.Namespace }}
+          value: {{ printf "%s://%s:$(RABBIT_CELERY_PASS)@%s:%s/" (include "rmq_protocol" .) (include "rmq_usr" .) (include "rmq_host" .) (include "rmq_port" .) }}
+        - name: REDIS_HOST
+          value: {{ .Values.dependencies.redis }}
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: redis-password
+              name: {{ .Values.dependencies.redis }}
+        image: {{ default .Values.images.task .Values.celerybatchprocessor.image }}
+        imagePullPolicy: {{ default "Always" $deployment.imagePullPolicy }}
+        name: {{ template "service.cbp.fullname" . }}
+        resources:
+          limits:
+            cpu: {{ default "512m" $deployment.resourcesLimitsCpu }}
+            memory: {{ default "512Mi" $deployment.resourcesLimitsMemory }}
+          requests:
+            cpu: {{ default "125m" $deployment.resourcesRequestsCpu }}
+            memory: {{ default "100Mi" $deployment.resourcesRequestsMemory }}
+        terminationMessagePath: {{ default "/dev/termination-log" $deployment.terminationMessagePath }}
+        terminationMessagePolicy: {{ default "File" $deployment.terminationMessagePolicy }}
+        workingDir: {{ default "/clincard/src/greenphire" $deployment.workingDir }}
+      dnsPolicy: {{ default "ClusterFirst" $deployment.dnsPolicy }}
+      restartPolicy: {{ default "Always" $deployment.restartPolicy }}
+      schedulerName: {{ default "default-scheduler" $deployment.schedulerName }}
+      {{- with $deployment.securityContext }}
+      securityContext:
+      {{- toYaml . | nindent 8 }}
+      {{- end }}      
+      terminationGracePeriodSeconds: {{ default 60 $deployment.terminationGracePeriodSeconds }}
+{{- end }}

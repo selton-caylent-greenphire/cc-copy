@@ -1,0 +1,129 @@
+{{- if eq .Values.jupyter.enable true }}
+{{- $deployment := .Values.jupyter }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels: {{ include "service.labels" . | nindent 4 }}
+    component: {{ template "service.jupyter.fullname" . }}
+    tier: {{ default .Values.tier $deployment.tier }}
+  name: {{ template "service.jupyter.fullname" . }}
+spec:
+  progressDeadlineSeconds: {{ default 600 $deployment.progressDeadlineSeconds}}
+  replicas: {{ default 1 $deployment.replicas }}
+  revisionHistoryLimit: {{ default 10 $deployment.revisionHistoryLimit }}
+  selector:
+    matchLabels: {{ include "service.selectorLabels" . | nindent 6 }}
+      component: {{ template "service.jupyter.fullname" . }}
+      tier: {{ default .Values.tier $deployment.tier }}
+  strategy:
+    rollingUpdate:
+      maxSurge: {{ default "50%" $deployment.strategyMaxSurge }}
+      maxUnavailable: {{ default "20%" $deployment.strategyMaxUnavailable }}
+    type: {{ default "RollingUpdate" $deployment.strategyType }}
+  template:
+    metadata:
+      labels: {{ include "service.labels" . | nindent 8 }}
+        component: {{ template "service.jupyter.fullname" . }}
+        tier: {{ default .Values.tier $deployment.tier }}   
+    spec:
+      initContainers:
+      - name: wait-for-database
+        env:
+        - name: PGPASSWORD
+          valueFrom:
+            secretKeyRef:
+              key: admin-portaldb-{{ include "pdb_adm" . }}
+              name: postgres-admin
+        image: {{ include "pgimage" . }}
+        command: ['sh', '-c', 'until pg_isready -h {{ include "psvc" . }}.{{ .Release.Namespace }} -U {{ include "pusr" . }} -d {{ include "pdb" . }}; do echo waiting for database; sleep 2; done;']
+      containers:
+      - args:
+        - bash
+        - -c
+        - mkdir -p /clincard/data/jupyter && pip install qtconsole==4.7.7 && pip install jupyter && mkdir /root/.ssh/ &&
+          cp /config/known_hosts /root/.ssh/ &&
+          cp /config/id_rsa /root/.ssh/ &&
+          chmod 600 -R /root/.ssh/* &&
+          git clone git@github.com:Greenphire/ClinCardSupportUtils /clincard/src/support_utils/ &&
+          cd /clincard/src/support_utils &&
+          python setup.py install &&
+          jupyter notebook --allow-root --config /config/jupyter_notebook_config.py --ip=0.0.0.0 --port=8080
+        env:
+{{ include (print .Template.BasePath "/_common_db_env.yaml.tpl"  ) . |  indent 8 }}
+{{ include (print .Template.BasePath "/_common_xfr_env.yaml.tpl" ) . |  indent 8 }}
+{{ include (print .Template.BasePath "/_common_svc_env.yaml.tpl" ) . |  indent 8 }}
+{{ include (print .Template.BasePath "/_common_rmq_env.yaml.tpl" ) . |  indent 8 }}
+{{ include (print .Template.BasePath "/_common_task_envs.yaml.tpl" ) . |  indent 8 }}
+{{- if eq .Release.Namespace "prod"}}
+{{ include (print .Template.BasePath "/_common_email_envs.yaml.tpl" ) . |  indent 8 }}
+{{- end }}
+{{- range $key, $value := $deployment.customEnv }}
+        - name: {{ $key }}
+          value: {{ $value | quote }}
+{{- end }}
+        - name: CCADMIN_URL
+          value: {{ printf "https://%s" .Values.global.hosts.ccadmin }}
+        - name: STATIC_URL
+          value: {{ printf "https://%s/" .Values.global.hosts.static }}
+        - name: PBDR_MAX_LEDGER_COUNT
+          value: {{ .Values.global.envs.PBDR_MAX_LEDGER_COUNT | quote }}
+        - name: GRAVE_DIGGER
+          value: {{ .Values.global.envs.GRAVE_DIGGER }}
+        - name: MEDIA_URL
+          value: {{ .Values.global.envs.MEDIA_URL | quote }}        
+        - name: LYFT_VERIFICATION_TOKEN
+          valueFrom:
+            secretKeyRef:
+              key: lyft_verification_token
+              name: {{ include "service.secret" . }}
+        - name: GOOGLE_MAPS_API_KEY
+          valueFrom:
+            secretKeyRef:
+              key: google_maps_api_key
+              name: {{ include "service.secret" . }}        
+        image: {{ .Values.images.task }}
+        imagePullPolicy: {{ default "IfNotPresent" $deployment.imagePullPolicy }}        
+        name: {{ default "task" $deployment.containerName }}
+        resources:
+          limits:
+            cpu: {{ default "125m" $deployment.resourcesLimitsCpu }}
+            memory: {{ default "1Gi" $deployment.resourcesLimitsMemory }}
+          requests:
+            cpu: {{ default "10m" $deployment.resourcesRequestsCpu }}
+            memory: {{ default "64Mi" $deployment.resourcesRequestsMemory }}
+        terminationMessagePath: {{ default "/dev/termination-log" $deployment.terminationMessagePath }}
+        terminationMessagePolicy: {{ default "File" $deployment.terminationMessagePolicy }}
+        volumeMounts:
+        - mountPath: {{ default "/clincard/data" $deployment.volumeDataMountPath }}
+          name: {{ default "data" $deployment.volumeDataName }}
+        - mountPath: {{ default "/config" $deployment.volumeConfigMountPath }}
+          name: {{ default "config" $deployment.volumeConfigName }}
+        - mountPath: {{ default "/root/.pmp" $deployment.volumePmpMountPath }}
+          name: {{ default "pmp-vol" $deployment.volumePmpName }}
+        - mountPath: {{ default "/.pgp" $deployment.volumePgpMountPath }}
+          name: {{ default "pgp" $deployment.volumePgpName }}
+      dnsPolicy: {{ default "ClusterFirst" $deployment.dnsPolicy }}
+      restartPolicy: {{ default "Always" $deployment.restartPolicy }}
+      schedulerName: {{ default "default-scheduler" $deployment.schedulerName }}
+      {{- with $deployment.securityContext }}
+      securityContext:
+      {{- toYaml . | nindent 8 }}
+      {{- end }}      
+      terminationGracePeriodSeconds: {{ default 60 $deployment.terminationGracePeriodSeconds }}
+      volumes:
+      - name: {{ default "data" $deployment.volumeDataName }}
+        persistentVolumeClaim:
+          claimName: {{ printf "clincard-efs-%s-data" $.Release.Namespace }}
+      - configMap:
+          defaultMode: {{ default 420 $deployment.volumeConfigDefaultMode }}
+          name: {{ template "service.jupyter.fullname" . }}
+        name: {{ default "config" $deployment.volumeConfigName }}
+      - name: {{ default "pmp-vol" $deployment.volumePmpName }}
+        secret:
+          secretName: {{ default "password-manager" $deployment.volumePmpSecretName }}
+          defaultMode: {{ default 384 $deployment.volumePmpDefaultMode }}
+      - name: {{ default "pgp" $deployment.volumePgpName }}
+        persistentVolumeClaim:
+          claimName: {{ printf "clincard-efs-%s-pgp" $.Release.Namespace }}
+{{- end }}

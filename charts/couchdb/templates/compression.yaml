@@ -1,0 +1,60 @@
+{{- $csvc := .Values.warmer.dbs.service -}}
+{{- $dbpis := .Values.warmer.dbs.db_pis -}}
+{{- $dbpbdr := .Values.warmer.dbs.db_pbdr -}}
+{{- if eq .Values.compression.enabled true }}
+apiVersion: batch/v1beta1
+kind: CronJob
+metadata:
+  labels:
+    app: {{ template "couchdb.name" . }}
+    component: {{ template "couchdb.name" . }}-compression
+    release: {{ .Release.Name }}
+    chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
+    heritage: {{ .Release.Service }}
+  name: {{ template "couchdb.name" . }}-compression
+spec:
+  concurrencyPolicy: {{ default "Forbid" .Values.compression.concurrencyPolicy  }}
+  failedJobsHistoryLimit: {{ default .Values.historyLimits.failedJobsHistoryLimit .Values.compression.failedJobsHistoryLimit  }}
+  successfulJobsHistoryLimit: {{ default .Values.historyLimits.successfulJobsHistoryLimit .Values.compression.successfulJobsHistoryLimit }}
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - args:
+            - -c
+            - curl -H "Content-Type:application/json" -X POST "http://{{ $csvc }}:5984/{{$dbpbdr}}/_compact/ProgramBalanceDetail" -u "$(COUCH_USER):$(COUCH_PASSWORD)"
+              && curl -H "Content-Type:application/json" -X POST "http://{{ $csvc }}:5984/{{$dbpbdr}}/_compact/ProgramSummary" -u "$(COUCH_USER):$(COUCH_PASSWORD)"
+              && curl -H "Content-Type:application/json" -X POST "http://{{ $csvc }}:5984/{{$dbpis}}/_compact/Payment" -u "$(COUCH_USER):$(COUCH_PASSWORD)"
+              && curl -H "Content-Type:application/json" -X POST "http://{{ $csvc }}:5984/{{$dbpis}}/_compact/Payee" -u "$(COUCH_USER):$(COUCH_PASSWORD)"
+              && curl -H "Content-Type:application/json" -X POST "http://{{ $csvc }}:5984/{{$dbpis}}/_compact/Payer" -u "$(COUCH_USER):$(COUCH_PASSWORD)"
+              && curl -H "Content-Type:application/json" -X POST "http://{{ $csvc }}:5984/{{$dbpis}}/_compact/TenNinetyNine" -u "$(COUCH_USER):$(COUCH_PASSWORD)"
+              && curl -H "Content-Type:application/json" -X POST "http://{{ $csvc }}:5984/{{$dbpis}}/_compact/AllDocs" -u "$(COUCH_USER):$(COUCH_PASSWORD)"
+              && curl -H "Content-Type:application/json" -X POST "http://{{ $csvc }}:5984/{{$dbpbdr}}/_view_cleanup" -u "$(COUCH_USER):$(COUCH_PASSWORD)"
+              && curl -H "Content-Type:application/json" -X POST "http://{{ $csvc }}:5984/{{$dbpis}}/_view_cleanup" -u "$(COUCH_USER):$(COUCH_PASSWORD)"
+            command:
+            - /bin/sh
+            env:
+              - name: COUCH_USER
+                valueFrom:
+                  secretKeyRef:
+                    key: adminUsername
+                    name: {{ template "couchdb.fullname" . }}
+              - name: COUCH_PASSWORD
+                valueFrom:
+                  secretKeyRef:
+                    key: adminPassword
+                    name: {{ template "couchdb.fullname" . }}
+            image: {{ default "alpine/curl" .Values.compression.image  }}
+            imagePullPolicy: {{ default "IfNotPresent" .Values.compression.imagePullPolicy }}
+            name: {{ default "task" .Values.compression.taskName }}
+            resources:
+              requests:
+                cpu: {{ default "20m" .Values.compression.resourcesCpu }}
+                memory: {{ default "128Mi" .Values.compression.resourcesMemory }}
+          restartPolicy: {{ default "OnFailure" .Values.compression.restartPolicy }}
+          schedulerName: {{ default "default-scheduler" .Values.compression.schedulerName }}
+          securityContext: {}
+  schedule: {{ .Values.compression.schedule | quote }}
+  suspend: {{ .Values.compression.suspend }}
+{{- end }}
